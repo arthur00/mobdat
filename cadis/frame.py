@@ -103,7 +103,7 @@ class Frame(object):
         Constructor
         '''
         self.app = None
-        self.Store = None
+        self.Store = store
         self.timer = None
         self.interval = None
         self.track_changes = False
@@ -147,7 +147,6 @@ class Frame(object):
         self.encoder = CADISEncoder()
         if store:
             logger.debug("%s received store %s", LOG_HEADER, store)
-            Frame.Store = store
 
     def attach(self, app):
         self.app = app
@@ -335,3 +334,6 @@ class Frame(object):
 
     def __deepcopy__(self, memo):
         return self
+
+
+Frame.Store = None

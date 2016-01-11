@@ -118,7 +118,7 @@ class Car(CADIS):
 class InactiveCar(Car):
     @staticmethod
     def query():
-        return [c for c in Frame.Store.get(Vehicle) if c.Position == Vector3(0,0,0)]  # @UndefinedVariable
+        return [c for c in Frame.Store.get(Car) if c.Position == Vector3(0,0,0)]  # @UndefinedVariable
 
     def start(self):
         logger.debug("[InactiveCar]: {0} starting".format(self.ID))
@@ -128,7 +128,7 @@ class InactiveCar(Car):
 class ActiveCar(Car):
     @staticmethod
     def query():  # @DontTrace
-        return [c for c in Frame.Store.get(Vehicle) if c.Velocity != Vector3(0,0,0)]  # @UndefinedVariable
+        return [c for c in Frame.Store.get(Car) if c.Velocity != Vector3(0,0,0)]  # @UndefinedVariable
     def move(self):
         self.Position = Vector3(self.Position.X + self.Velocity.X, self.Position.Y + self.Velocity.Y, self.Position.Z + self.Velocity.Z)
         logger.debug("[ActiveCar]: {0} New position {1}".format(self.ID, self.Position));
@@ -235,7 +235,7 @@ class PedestrianInDanger(Pedestrian):
     def query():
         result = []
         for p in Frame.Store.get(Pedestrian):  # @UndefinedVariable
-            for c in Frame.Store.get(Vehicle):  # @UndefinedVariable
+            for c in Frame.Store.get(Car):  # @UndefinedVariable
                 if abs(c.Position.X - p.X) < 130 and c.Position.Y == p.Y:
                     result.append(p)
         return result
