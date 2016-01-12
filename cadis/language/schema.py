@@ -71,20 +71,21 @@ class Property(property):
         property.__init__(self, func, *args, **kwargs)
 
     def __set__(self, obj, value):
-        frame = schema_data.frame
-        if frame.track_changes:
-            if self._of in sets:
-                superset = self._of
-            else:
-                superset = setsof[self._of]
-            #Schema.frame.set_property(superset, obj, value, self._name)
-            frame.set_property(superset, obj, value, self._name)
-            #pushlist = Schema.frame.pushlist[superset]
-            #if obj._primarykey not in pushlist:
-            #    pushlist[superset][obj._primarykey] = {}
+        if hasattr(schema_data, 'frame'):
+            frame = schema_data.frame
+            if frame.track_changes:
+                if self._of in sets:
+                    superset = self._of
+                else:
+                    superset = setsof[self._of]
+                #Schema.frame.set_property(superset, obj, value, self._name)
+                frame.set_property(superset, obj, value, self._name)
+                #pushlist = Schema.frame.pushlist[superset]
+                #if obj._primarykey not in pushlist:
+                #    pushlist[superset][obj._primarykey] = {}
 
-            # Save the property update
-            #pushlist[superset][obj._primarykey][self._name] = value
+                # Save the property update
+                #pushlist[superset][obj._primarykey][self._name] = value
         property.__set__(self, obj, value)
 
 class PrimaryProperty(Property):

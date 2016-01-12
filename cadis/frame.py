@@ -13,6 +13,9 @@ from cadis.language.schema import schema_data, CADISEncoder
 import threading
 import time
 import platform
+
+import uuid
+
 logger = logging.getLogger(__name__)
 LOG_HEADER = "[FRAME]"
 
@@ -98,12 +101,13 @@ class Frame(object):
     '''
     classdocs
     '''
+
+    Store = None
     def __init__(self, store=None):
         '''
         Constructor
         '''
         self.app = None
-        self.Store = None
         self.timer = None
         self.interval = None
         self.track_changes = False
@@ -300,6 +304,10 @@ class Frame(object):
     def add(self, obj):
         if obj.__class__ in self.storebuffer:
             #logger.debug("%s Creating new object %s.%s", LOG_HEADER, obj.__class__, obj._primarykey)
+            if obj._primarykey == None:
+                obj._primarykey = uuid.uuid4()
+            else:
+                obj._primarykey = uuid.UUID(obj._primarykey) # Checks if assigned primary is a valid uuid
             obj._frame = self
             self.newlyproduced[obj.__class__].append(obj)
             self.storebuffer[obj.__class__][obj._primarykey] = obj

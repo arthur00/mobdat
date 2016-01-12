@@ -32,7 +32,10 @@ class TrafficSimulation(IFramed):
     def initialize(self):
         logger.debug("%s Initializing", LOG_HEADER)
         for i in xrange(2):
-            self.frame.add(Car(i))
+            self.frame.add(Car())
+        # self.frame.add(Car("1d4883f3-b8f7-11e5-a78c-acbc327e1743")) Valid uuid Example
+        # self.frame.add(Car("1d4883f3")) Invalid uuid Example - Crashes
+
         self.cars = self.frame.get(Car)
 
     def update(self):

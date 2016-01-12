@@ -9,6 +9,7 @@ import logging.handlers
 import os
 from cadis.frame import Frame
 from cadis.simulation.trafficsim import TrafficSimulation
+from cadis.simulation.pedestriansim import PedestrianSimulation
 from time import sleep
 
 logger = None
@@ -23,7 +24,12 @@ class Simulation(object):
         '''
         frame_car = Frame()
         frame_car.attach(TrafficSimulation(frame_car))
+        
+        frame_ped = Frame(frame_car.Store)
+        frame_ped.attach(PedestrianSimulation(frame_ped))
+        
         frame_car.go()
+        frame_ped.go()
 
 def SetupLoggers():
     global logger
