@@ -11,6 +11,7 @@ from cadis.frame import Frame
 from cadis.simulation.trafficsim import TrafficSimulation
 from cadis.simulation.pedestriansim import PedestrianSimulation
 from time import sleep
+from cadis.store.remotestore import RemoteStore
 
 logger = None
 
@@ -22,14 +23,15 @@ class Simulation(object):
         '''
         Constructor
         '''
-        frame_car = Frame()
+        frame_car = Frame(RemoteStore())
+        frame_car.interval = 1.0
         frame_car.attach(TrafficSimulation(frame_car))
         
-        frame_ped = Frame(frame_car.Store)
-        frame_ped.attach(PedestrianSimulation(frame_ped))
+        #frame_ped = Frame(frame_car.Store)
+        #frame_ped.attach(PedestrianSimulation(frame_ped))
         
         frame_car.go()
-        frame_ped.go()
+        #frame_ped.go()
 
 def SetupLoggers():
     global logger

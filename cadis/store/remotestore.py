@@ -10,6 +10,7 @@ from copy import deepcopy
 import json, sys
 import urllib2
 from cadis.language.schema import CADISEncoder
+from uuid import uuid4, UUID
 
 class RemoteStore(IStore):
     '''
@@ -42,7 +43,6 @@ class RemoteStore(IStore):
         objlist = []
         for data in jsonlist:
             obj = typeObj.__new__(typeObj)
-            obj.ID = data["ID"]
             for dim in obj._dimensions:
                 prop = getattr(obj, dim._name)
                 if hasattr(prop, "__decode__"):
@@ -50,6 +50,7 @@ class RemoteStore(IStore):
                 else:
                     prop = data[dim._name]
                 setattr(obj, dim._name, prop)
+            obj.ID = UUID(data["ID"])
             objlist.append(obj)
         return objlist
 

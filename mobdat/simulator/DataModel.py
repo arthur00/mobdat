@@ -7,11 +7,10 @@ import logging
 from cadis.language.schema import dimension, Set, SubSet, CADIS, dimensions, sets, subsets, primarykey
 from collections import namedtuple
 from cadis.frame import Frame
-
+import uuid
 
 logger = logging.getLogger(__name__)
 LOG_HEADER = "[DATAMODEL]"
-CAR_IDS = 0
 
 #Vector3 = namedtuple("Vector3", ['X', 'Y', 'Z'])
 class Vector3(object):
@@ -118,9 +117,7 @@ class Vehicle(CADIS):
         self._Rotation = value
 
     def __init__(self):
-        global CAR_IDS
-        self.ID = CAR_IDS
-        CAR_IDS += 1
+        self.ID = uuid.uuid4()
 
 @SubSet(Vehicle)
 class MovingVehicle(Vehicle):

@@ -21,7 +21,7 @@ class TrafficSimulation(IFramed):
 
     frame = None
     ticks = 0
-    TICKS_BETWEEN_CARS = 5
+    TICKS_BETWEEN_CARS = 25
     cars = []
     def __init__(self, frame):
         '''

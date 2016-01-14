@@ -8,6 +8,7 @@ import logging
 from copy import deepcopy
 import json
 import threading
+from uuid import UUID
 logger = logging.getLogger(__name__)
 LOG_HEADER = "[SCHEMA]"
 
@@ -101,6 +102,7 @@ class MetaCADIS(type):
                 value._of = result
             if hasattr(value, '_primarykey'):
                 result._primarykey = value
+                dimensions[result].append(value)
                 value._of = result
         #dimensions[result] = [
         #    value for value in namespace.values() if hasattr(value, '_dimension')]
@@ -125,6 +127,8 @@ class CADISEncoder(json.JSONEncoder):
                 if hasattr(prop, "__json__"):
                     obj_dict[dim._name] = prop.__json__()
                 else:
-                    obj_dict[dim._name] = prop
-
+                    if isinstance(prop, UUID):
+                        obj_dict[dim._name] = str(prop)
+                    else:
+                        obj_dict[dim._name] = prop
             return obj_dict
