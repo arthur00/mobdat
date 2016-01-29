@@ -202,7 +202,7 @@ class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
             car.Position = self.__NormalizeCoordinate(info[tc.VAR_POSITION])
             car.Rotation = self.__NormalizeAngle(info[tc.VAR_ANGLE])
             car.Velocity = self.__NormalizeVelocity(info[tc.VAR_SPEED], info[tc.VAR_ANGLE])
-            #self.__Logger.info("Vehicle %s at %s", car.Name, car.Position)
+            self.__Logger.debug("Vehicle %s at %s", car.Name, car.Position)
             #event = EventTypes.EventObjectDynamics(v, pos, ang, vel)
             #self.PublishEvent(event)
 
@@ -239,6 +239,10 @@ class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
             self.HandleDepartedVehicles()
             self.HandleVehicleUpdates()
             self.HandleArrivedVehicles()
+
+            if (self.CurrentStep % int(5.0 / self.Interval)) == 0:
+                self.__Logger.info('[%s] number of vehicles in simulation: %s', self.CurrentStep, len(self.cars.keys()))
+
         except TypeError as detail:
             self.__Logger.exception("[sumoconector] simulation step failed with type error %s" % (str(detail)))
             sys.exit(-1)

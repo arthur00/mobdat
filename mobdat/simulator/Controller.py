@@ -43,6 +43,7 @@ import os, sys
 import logging
 from cadis.frame import Frame
 from cadis.store.simplestore import SimpleStore
+from cadis.store.remotestore import RemoteStore
 
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
@@ -230,6 +231,7 @@ def Controller(settings) :
     # initialize the connectors first
     connectors = []
     store = SimpleStore()
+    #store= RemoteStore()
     for cname in cnames :
         if cname not in _SimulationControllers :
             logger.warn('skipping unknown simulation connector; %s' % (cname))

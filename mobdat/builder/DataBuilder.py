@@ -7,15 +7,15 @@ modification, are permitted provided that the following conditions are
 met:
 
 * Redistributions of source code must retain the above copyright notice,
-  this list of conditions and the following disclaimer. 
+  this list of conditions and the following disclaimer.
 
 * Redistributions in binary form must reproduce the above copyright
   notice, this list of conditions and the following disclaimer in the
-  documentation and/or other materials provided with the distribution. 
+  documentation and/or other materials provided with the distribution.
 
 * Neither the name of Intel Corporation nor the names of its
   contributors may be used to endorse or promote products derived from
-  this software without specific prior written permission. 
+  this software without specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
 IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -27,7 +27,7 @@ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
 PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
 LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 @file    OpenSimBuilder.py
 @author  Mic Bowman
@@ -39,6 +39,10 @@ The functions in this file will rez a mobdat network in an OpenSim region.
 
 import os, sys
 import logging
+from mobdat.simulator.DataModel import Road, SimulationNode, BusinessNode,\
+    ResidentialNode, PersonNode, VehicleInfo, JobDescription
+from mobdat.common.ValueTypes import Vector3
+from cadis.language.schema import CADISEncoder
 
 # we need to import python modules from the $SUMO_HOME/tools directory
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
@@ -53,20 +57,23 @@ import json
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-class OpenSimBuilder :
-
+class DataBuilder :
     # -----------------------------------------------------------------
     def __init__(self, settings, world, laysettings) :
         self.Logger = logging.getLogger(__name__)
+        self.employedby = {}
+        self.livesat = {}
 
         self.World = world
         self.LayoutSettings = laysettings
+        self.DataFolder = None
 
         self.RoadMap = {}
         self.NodeMap = {}
 
+        self.cadis_roads = []
+
         try :
-            AuthByUserName(settings)
             self.RegionMap = GenCoordinateMap(settings)
             woffs = settings["OpenSimConnector"]["BuildOffset"]
             self.BuildOffsetX = woffs[0]
@@ -76,44 +83,19 @@ class OpenSimBuilder :
             self.RegionSizeX = rsize[0]
             self.RegionSizeY = rsize[1]
 
-            self.Scenes = settings["OpenSimConnector"]["Scenes"]
-
             self.WorldScale = settings["OpenSimConnector"].get("Scale",0.5)
 
-        except NameError as detail: 
+            self.DataFolder = settings["General"]["Data"]
+        except NameError as detail:
             self.Logger.warn("Failed processing OpenSim configuration; name error %s", (str(detail)))
             sys.exit(-1)
-        except KeyError as detail: 
+        except KeyError as detail:
             self.Logger.warn("unable to locate OpenSim configuration value for %s", (str(detail)))
             sys.exit(-1)
         except :
             exctype, value =  sys.exc_info()[:2]
             self.Logger.warn('handler failed with exception type %s; %s', exctype, str(value))
             sys.exit(-1)
-
-    # -----------------------------------------------------------------
-    def FindAssetInObject(self, assetinfo) :
-        oname = assetinfo["ObjectName"]
-        iname = assetinfo["ItemName"]
-
-        for name,sim in self.Scenes.items():
-            conn = sim["RemoteControl"]
-            result = conn.FindObjects(pattern = oname)
-            if not (result["_Success"] == 1) or len(result["Objects"]) == 0 :
-                continue
-
-            objectid = result["Objects"][0]
-            result = conn.GetObjectInventory(objectid)
-            if not result["_Success"] :
-                self.Logger.warn("Failed to get inventory from container object %s; %s",oname, result["_Message"])
-                sys.exit(-1)
-
-            for item in result["Inventory"] :
-                if item["Name"] == iname :
-                    return item["AssetID"]
-
-        self.Logger.warn("Failed to locate item %s in object %s",iname, oname);
-        return None
 
     # -----------------------------------------------------------------
     def ComputeRotation(self, sig1, sig2) :
@@ -141,7 +123,7 @@ class OpenSimBuilder :
 
         #sbump = self.NodeMap[snode.Name].Padding
         #ebump = self.NodeMap[enode.Name].Padding
-    
+
         deltax = enode.Coord.X - snode.Coord.X
         deltay = enode.Coord.Y - snode.Coord.Y
 
@@ -191,49 +173,59 @@ class OpenSimBuilder :
         return CalculateOSCoordinatesFromOrigin(s1x + self.BuildOffsetX, s1y + self.BuildOffsetY, e1x + self.BuildOffsetX, e1y + self.BuildOffsetY, self)
 
     # -----------------------------------------------------------------
-    def PushNetworkToOpenSim(self) :
+    def PushNetworkToFile(self) :
         self.CreateNodes()
         self.CreateRoads()
 
     # -----------------------------------------------------------------
     def CreateRoads(self) :
-
+        cadis_roads = []
         for rname, road in self.World.IterEdges(edgetype = 'Road') :
             if rname in self.RoadMap :
                 continue
 
             if road.RoadType.Name not in self.LayoutSettings.RoadTypeMap :
                 self.Logger.warn('Failed to find asset for %s' % (road.RoadType.Name))
-                continue 
+                continue
 
             # check to see if we need to render this road at all
             if road.RoadType.Render :
-                asset = self.LayoutSettings.RoadTypeMap[road.RoadType.Name][0].AssetID
                 zoff = self.LayoutSettings.RoadTypeMap[road.RoadType.Name][0].ZOffset
 
-                if type(asset) == dict :
-                    asset = self.FindAssetInObject(asset)
-                    self.LayoutSettings.RoadTypeMap[road.RoadType.Name][0].AssetID = asset
-
                 (p1x, p1y),(p2x, p2y),scene = self.ComputeLocation(road.StartNode, road.EndNode)
-                sparms = {}
-                sparms['spoint'] = '<%f, %f, %f>' % (p1x, p1y, zoff)
-                sparms['epoint'] = '<%f, %f, %f>' % (p2x, p2y, zoff)
-                sparms['width'] = road.RoadType.TotalWidth(scale=self.WorldScale)
-                sparms['type'] = road.RoadType.Dump()
-                startparms = json.dumps(sparms)
-
-                conn = scene["RemoteControl"]
-                if abs(p1x - p2x) > 0.1 or abs(p1y - p2y) > 0.1 :
-                    result = conn.CreateObject(asset, pos=[p1x, p1y, zoff], name=road.Name, parm=startparms)
+                # Create CADIS road objects for run-time usage
+                cadis_road = Road()
+                cadis_road.StartingPoint = Vector3(p1x, p1y, zoff)
+                cadis_road.EndPoint = Vector3(p2x, p2y, zoff)
+                cadis_road.Width = road.RoadType.TotalWidth(scale=self.WorldScale)
+                cadis_road.Type = road.RoadType.Dump()
+                cadis_roads.append(cadis_road)
 
             # build the map so that we do render the reverse roads
             self.RoadMap[Edge.GenEdgeName(road.StartNode, road.EndNode)] = True
             self.RoadMap[Edge.GenEdgeName(road.EndNode, road.StartNode)] = True
-    
+
+        if self.DataFolder and cadis_roads:
+            f = open(os.path.join(self.DataFolder,"roads.js"), "w")
+            f.write(json.dumps(cadis_roads,cls=CADISEncoder))
+            f.close()
 
     # -----------------------------------------------------------------
-    def CreateNode(self, name, node) :
+    def CreatePerson(self, name, node, list_nodes):
+        person = PersonNode()
+        person.Vehicle = VehicleInfo(node.Vehicle.VehicleName, node.Vehicle.VehicleType)
+        jobd = node.JobDescription.JobDescription
+        person.JobDescription = JobDescription(jobd.Salary, jobd.FlexibleHours, jobd.Schedule)
+        person.Preference = node.Preference.PreferenceMap
+        person.Name = name
+        if name in self.livesat:
+            person.LivesAt = self.livesat[name]
+        if name in self.employedby:
+            person.EmployedBy = self.employedby[name]
+        list_nodes.append(person)
+
+    # -----------------------------------------------------------------
+    def CreateNode(self, name, node, list_nodes) :
         tname = node.IntersectionType.Name
         sig1 = node.EdgeMap.Signature()
 
@@ -251,25 +243,46 @@ class OpenSimBuilder :
 
                 (p1x,p1y),sim = CalculateOSCoordinates(node.Coord.X + self.BuildOffsetX, node.Coord.Y + self.BuildOffsetY, self)
                 p1z = itype.ZOffset
-                asset = itype.AssetID
-                if type(asset) == dict :
-                    asset = self.FindAssetInObject(asset)
-                    itype.AssetID = asset
+                if node.NodeType.Name == "EndPoint":
+                    if "BusinessLocation" in node.InheritedDecorations:
+                        busloc = node.BusinessLocation.HostObject
+                        simnode = BusinessNode()
+                        simnode.PeakCustomerCount = node.BusinessLocation.PeakCustomerCount
+                        simnode.PeakEmployeeCount = node.BusinessLocation.PeakEmployeeCount
+                        simnode.CustomersPerNode = node.BusinessLocation.HostObject.BusinessLocationProfile.CustomersPerNode
+                        simnode.EmployeesPerNode = node.BusinessLocation.HostObject.BusinessLocationProfile.EmployeesPerNode
+                        simnode.PreferredBusinessTypes = node.BusinessLocation.HostObject.BusinessLocationProfile.PreferredBusinessTypes
+                        for edge in busloc.InputEdges:
+                            if edge.NodeType.Name == "ResidesAt":
+                                bnode = edge.StartNode
+                                if "EmploymentProfile" in bnode.Decorations:
+                                    ep = bnode.EmploymentProfile.HostObject
+                                    for wedge in ep.InputEdges:
+                                        self.employedby[wedge.StartNode.Name] = name
+                    elif "ResidentialLocation" in node.InheritedDecorations:
+                        resloc = node.ResidentialLocation.HostObject
+                        simnode = ResidentialNode()
+                        simnode.ResidentsPerNode = resloc.ResidentialLocationProfile.ResidentsPerNode
+                        simnode.ResidentCount = node.ResidentialLocation.ResidentCount
+                        simnode.ResidenceList = []
+                        for edge in resloc.InputEdges:
+                            if edge.NodeType.Name == "ResidesAt":
+                                simnode.ResidenceList.append(edge.StartNode.Name)
+                                self.livesat[edge.StartNode.Name] = name
 
-                #startparms = "{ 'center' : '<%f, %f, %f>', 'angle' : %f }" % (p1x, p1y, p1z, 90.0 * rot)
-                sparms = {}
-                sparms['center'] = '<%f, %f, %f>' % (p1x, p1y, p1z)
-                sparms['angle' ] = 90.0 * rot
-                sparms['type'] = node.IntersectionType.Dump()
-                sparms['width'] = node.EdgeMap.Widths(scale=self.WorldScale)
+                else:
+                    # Create CADIS node objects for run-time usage
+                    simnode = SimulationNode()
 
-                startparms = json.dumps(sparms)
-
-                if node.IntersectionType.Render :
-                    result = sim["RemoteControl"].CreateObject(asset, pos=[p1x, p1y, p1z], name=name, parm=startparms)
-
+                simnode.Name = name
+                simnode.Center = Vector3(p1x, p1y, p1z)
+                simnode.Angle = 90.0 * rot
+                simnode.Width = node.EdgeMap.Widths(scale=self.WorldScale)
+                simnode.Type = node.IntersectionType.Dump()
+                list_nodes.append(simnode)
                 success = True
-                break
+            else:
+                self.Logger.warn("Rotation < 0 for node %s", node)
 
         if not success :
             self.NodeMap[name] = self.LayoutSettings.IntersectionTypeMap[tname][0]
@@ -277,9 +290,39 @@ class OpenSimBuilder :
 
     # -----------------------------------------------------------------
     def CreateNodes(self) :
+        intersections = []
+        residential = []
+        business = []
+        people = []
 
         for name, node in self.World.IterNodes(nodetype = 'Intersection') :
-            self.CreateNode(name, node)
+            self.CreateNode(name, node, intersections)
 
         for name, node in self.World.IterNodes(nodetype = 'EndPoint') :
-            self.CreateNode(name, node)
+            if "BusinessLocation" in node.InheritedDecorations:
+                self.CreateNode(name, node, business)
+            elif "ResidentialLocation" in node.InheritedDecorations:
+                self.CreateNode(name, node, residential)
+
+        for name, person in self.World.IterNodes(nodetype = 'Person') :
+            self.CreatePerson(name, person, people)
+
+        if self.DataFolder and intersections:
+            f = open(os.path.join(self.DataFolder,"intersections.js"), "w")
+            f.write(json.dumps(intersections,cls=CADISEncoder))
+            f.close()
+
+        if self.DataFolder and people:
+            f = open(os.path.join(self.DataFolder,"people.js"), "w")
+            f.write(json.dumps(people,cls=CADISEncoder))
+            f.close()
+
+        if self.DataFolder and business:
+            f = open(os.path.join(self.DataFolder,"business.js"), "w")
+            f.write(json.dumps(business,cls=CADISEncoder))
+            f.close()
+
+        if self.DataFolder and residential:
+            f = open(os.path.join(self.DataFolder,"residential.js"), "w")
+            f.write(json.dumps(residential,cls=CADISEncoder))
+            f.close()

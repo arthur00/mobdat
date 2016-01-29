@@ -5,7 +5,7 @@ Created on Dec 14, 2015
 '''
 
 from threading import Timer
-from copy import deepcopy
+from copy import deepcopy, copy
 from cadis.store.simplestore import SimpleStore
 import logging, sys
 from cadis.store.remotestore import RemoteStore
@@ -89,6 +89,8 @@ class TimerThread(threading.Thread) :
 
             if (etime - stime) < self.IntervalTime :
                 time.sleep(self.IntervalTime - (etime - stime))
+            else:
+                self.__Logger.warn("Exceeded interval time by %s" , (etime - stime))
 
             CurrentIteration += 1
 
@@ -205,6 +207,7 @@ class Frame(object):
             else:
                 Frame.Store = SimpleStore()
 
+        Frame.Store.register(self)
 
     def execute_Frame(self):
         self.pull()
@@ -226,29 +229,42 @@ class Frame(object):
             self.mod_storebuffer[t] = {}
             self.del_storebuffer[t] = {}
 
-            tmpbuffer[t] = {}
-            for o in Frame.Store.get(t):
-                tmpbuffer[t][o._primarykey] = o
-
-            #TODO: Remove when Store does this
-            # Added objects since last pull
-            for o in tmpbuffer[t].values():
-                if o._primarykey not in self.storebuffer[t]:
-                    #logger.debug("%s Found new object: %s", LOG_HEADER, o)
+            if hasattr(Frame.Store, "updated"):
+                (new, mod, deleted) = Frame.Store.updated(t, self)
+                for o in new:
+                    self.storebuffer[t][o._primarykey] = o
                     self.new_storebuffer[t][o._primarykey] = o
-                else:
-                    # check if updated
-                    orig = self.encoder.encode(self.storebuffer[t][o._primarykey])
-                    new = self.encoder.encode(o)
-                    if orig != new:
-                        self.mod_storebuffer[t][o._primarykey] = o
+                for o in mod:
+                    self.storebuffer[t][o._primarykey] = o
+                    self.mod_storebuffer[t][o._primarykey] = o
+                for o in deleted:
+                    if o._primarykey in self.storebuffer[t]:
+                        del self.storebuffer[t][o._primarykey]
+                        self.del_storebuffer[t][o._primarykey] = o
+            else:
+                tmpbuffer[t] = {}
+                for o in Frame.Store.get(t):
+                    tmpbuffer[t][o._primarykey] = o
 
-            # Deleted objects since last pull
-            for o in self.storebuffer[t].values():
-                if o._primarykey not in tmpbuffer[t]:
-                    self.del_storebuffer[t][o._primarykey] = o
+                #TODO: Remove when Store does this
+                # Added objects since last pull
+                for o in tmpbuffer[t].values():
+                    if o._primarykey not in self.storebuffer[t]:
+                        #logger.debug("%s Found new object: %s", LOG_HEADER, o)
+                        self.new_storebuffer[t][o._primarykey] = o
+                    else:
+                        # check if updated
+                        orig = self.encoder.encode(self.storebuffer[t][o._primarykey])
+                        new = self.encoder.encode(o)
+                        if orig != new:
+                            self.mod_storebuffer[t][o._primarykey] = o
 
-            self.storebuffer[t] = deepcopy(tmpbuffer[t])
+                # Deleted objects since last pull
+                for o in self.storebuffer[t].values():
+                    if o._primarykey not in tmpbuffer[t]:
+                        self.del_storebuffer[t][o._primarykey] = o
+
+                self.storebuffer[t] = tmpbuffer[t]
 
     def prepare_push(self):
         #for t in self.changedproperties:
@@ -272,7 +288,7 @@ class Frame(object):
                         #logger.debug("Setting attributes in pushlist for ID %s: %s = %s",primkey,propname,self.pushlist[t][primkey][propname])
                         setattr(obj, propname, self.pushlist[t][primkey][propname])
                     # TODO: This should be an update, not an insert
-                    Frame.Store.insert(obj)
+                    Frame.Store.insert(obj, self)
                 else:
                     logger.error("[%s] Could not find superset object for object ID %s. Pushlist: %s", self.app, primkey, self.pushlist[t])
             self.pushlist[t] = {}
@@ -281,7 +297,7 @@ class Frame(object):
             if t in self.newlyproduced:
                 for o in self.newlyproduced[t]:
                     #logger.debug("[%s] Adding obj %s (ID %s) to store", self.app, o, o._primarykey)
-                    Frame.Store.insert(o)
+                    Frame.Store.insert(o, self)
                 self.newlyproduced[t] = []
 
         for t in self.deletelist:
@@ -312,8 +328,6 @@ class Frame(object):
             #logger.debug("%s Creating new object %s.%s", LOG_HEADER, obj.__class__, obj._primarykey)
             if obj._primarykey == None:
                 obj._primarykey =  uuid.uuid4()
-            else:
-                obj._primarykey = uuid.UUID(obj._primarykey) # Checks if assigned primary is a valid uuid
             obj._frame = self
             self.newlyproduced[obj.__class__].append(obj)
             self.storebuffer[obj.__class__][obj._primarykey] = obj
@@ -329,21 +343,21 @@ class Frame(object):
 
     def get(self, t, primkey=None):
         if primkey != None:
-            a = deepcopy(self.storebuffer[t][primkey])
+            a = copy(self.storebuffer[t][primkey])
         else:
-            a = deepcopy(self.storebuffer[t].values())
+            a = copy(self.storebuffer[t].values())
         return a
 
     def new(self, t):
-        return deepcopy(self.new_storebuffer[t].values())
+        return copy(self.new_storebuffer[t].values())
 
     def deleted(self, t):
-        return deepcopy(self.del_storebuffer[t].values())
+        return copy(self.del_storebuffer[t].values())
 
     def changed(self, t):
         if len(self.mod_storebuffer[t].keys()):
             #logger.debug("objects with IDs %s have changed", self.mod_storebuffer[t].keys())
-            return deepcopy(self.mod_storebuffer[t].values())
+            return copy(self.mod_storebuffer[t].values())
         else:
             return []
 

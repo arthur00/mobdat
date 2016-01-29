@@ -158,7 +158,10 @@ class Vector3 :
 
     # -----------------------------------------------------------------
     def Equals(self, other) :
-        return self.x == other.x and self.y == other.y and self.z == other.z
+        if isinstance(other, Vector3):
+            return self.x == other.x and self.y == other.y and self.z == other.z
+        elif isinstance(other, tuple) or isinstance(other, list):
+            return (other[0] == self.x and other[1] == self.y and other[2] == self.z)
 
     # -----------------------------------------------------------------
     def ApproxEquals(self, other, tolerance) :
@@ -194,7 +197,12 @@ class Vector3 :
 
     @staticmethod
     def __decode__(dic):
-        return Vector3(dic['x'], dic['y'], dic['z'])
+        if 'x' in dic and 'y' in dic and 'z' in dic:
+            return Vector3(dic['x'], dic['y'], dic['z'])
+        elif 'X' in dic and 'Y' in dic and 'Z' in dic:
+            return Vector3(dic['X'], dic['Y'], dic['Z'])
+        else:
+            raise Exception("Could not decode Vector3 with dic %s" % dic)
 
 ## XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ## XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -239,6 +247,13 @@ class Quaternion :
     def __str__(self) :
         fmt = "<{0}, {1}, {2}, {3}>"
         return fmt.format(self.x, self.y, self.z, self.w)
+
+    @staticmethod
+    def __decode__(dic):
+        return Quaternion(dic['X'], dic['Y'], dic['Z'], dic['W'])
+
+    def __json__(self):
+        return self.__dict__
 
 ## XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ## XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX

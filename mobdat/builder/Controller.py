@@ -49,7 +49,8 @@ sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "
 
 import json
 from mobdat.common import LayoutSettings
-from mobdat.builder import WorldBuilder, OpenSimBuilder, SumoBuilder
+from mobdat.builder import WorldBuilder, OpenSimBuilder, SumoBuilder,\
+    DataBuilder
 
 global world
 global laysettings
@@ -147,3 +148,7 @@ def Controller(settings, pushlist) :
             logger.info("building sumo")
             scb = SumoBuilder.SumoBuilder(settings, world, laysettings)
             scb.PushNetworkToSumo()
+        elif push == 'data' :
+            logger.info('building data for CADIS')
+            db = DataBuilder.DataBuilder(settings,world,laysettings)
+            db.PushNetworkToFile()

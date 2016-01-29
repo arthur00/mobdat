@@ -21,7 +21,7 @@ class PedestrianSimulation(IFramed):
 
     frame = None
     ticks = 0
-    TICKS_BETWEEN_PEDESTRIANS = 5
+    TICKS_BETWEEN_PEDESTRIANS = 10
     pedestrians = []
     def __init__(self, frame):
         '''
@@ -31,7 +31,7 @@ class PedestrianSimulation(IFramed):
 
     def initialize(self):
         logger.debug("%s Initializing", LOG_HEADER)
-        for i in xrange(1):
+        for i in xrange(5):
             self.frame.add(Pedestrian())
 
         self.pedestrians = self.frame.get(Pedestrian)

@@ -5,14 +5,14 @@
         "Interval" : 0.200,
         "SecondsPerStep" : 2.0,
         "StartTimeOfDay" : 7.0,
-        "MaximumTravelers" : 2000,
+        "MaximumTravelers" : 100,
 		"WorldInfoFile" : "worldinfo.js",
         "Connectors" : ["sumo", "social", "opensim"]
     },
 
     "Builder" :
     {
-        "ExtensionFiles" : ["networks/fullnet/dist_layout.py", "networks/fullnet/business.py", "networks/fullnet/people.py"]
+        "ExtensionFiles" : ["networks/fullnet/layout.py", "networks/fullnet/business.py", "networks/fullnet/people.py"]
     },
 
     "SocialConnector" :
@@ -24,7 +24,7 @@
 
     "OpenSimConnector" :
     {
-        "WorldSize" : [1910.0, 1910.0, 100.0],
+        "WorldSize" : [810.0, 810.0, 100.0],
         "RegionSize" : [1024.0, 1024.0],
         "BuildOffset" : [415.0, 415.0],
         "WorldOffset" : [10.0, 10.0, 25.5],

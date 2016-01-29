@@ -17,17 +17,59 @@ PREFIX = "Frame.Simulation."
 
 sets = set()
 subsets = set()
+permutationsets = set()
 # Dictionary of set -> subsets
 subsetsof = {}
 # Dictionary of subset -> set
 setsof = {}
 dimensions = {}
 
+# Class permuted from -> permuted class
+permutations = {}
+
+# Permuted class -> class permuted from
+permutedclss = {}
+
 schema_data = threading.local()
+
+def foreignkey(relatedto):
+    def wrapped(prop):
+        prop._relatedto = relatedto
+        return prop
+    return wrapped
+
+def dimensionof(cls):
+    def wrapped(func):
+        found = False
+        for dim in dimensions[cls]:
+            if dim._name == func.func_name:
+                prop = Property(func)
+                found = True
+        if not found:
+            raise Exception("Could not find property %s in parent class %s" % func.func_name, cls)
+        return prop
+    return wrapped
+
 
 def primarykey(func):
     prop = PrimaryProperty(func)
     return prop
+
+def Permutation(*args):
+    def wrapped(cls):
+        cls._dimensions = dimensions[cls]
+        for of in args:
+            if of in permutations:
+                permutations[of].append(cls)
+            else:
+                permutations[of] = [cls]
+            permutedclss[cls] = of
+            permutationsets.add(cls)
+        #for prop in cls.__import_dimensions__:
+        #    cls._dimensions.append(prop)
+        #    setattr(cls, prop._name, prop.fget(prop._of))
+        return cls
+    return wrapped
 
 def Set(cls):
     cls._dimensions = dimensions[cls]
@@ -74,7 +116,7 @@ class Property(property):
     def __set__(self, obj, value):
         if hasattr(schema_data, 'frame'):
             frame = schema_data.frame
-            if frame.track_changes:
+            if frame.track_changes and not hasattr(self, "_primarykey"):
                 if self._of in sets:
                     superset = self._of
                 else:
@@ -96,6 +138,13 @@ class MetaCADIS(type):
     def __new__(cls, name, bases, namespace, **kwds):
         result = type.__new__(cls, name, bases, dict(namespace))
         dimensions[result] = []
+        if "__import_dimensions__" in namespace:
+            for prop in namespace["__import_dimensions__"]:
+                #prop._of = result
+                #newprop = property(prop.fget, prop.fset, None, "I'm the 'x' property.")
+                dimensions[result].append(prop)
+                setattr(result, "_" + prop._name, prop.fget(prop._of))
+                setattr(result, prop._name, prop)
         for value in namespace.values():
             if hasattr(value, '_dimension'):
                 dimensions[result].append(value)
@@ -115,6 +164,17 @@ class CADIS(object):
 
     def __init__(self):
         pass
+
+    _ID = None
+    @primarykey
+    def ID(self):
+        return self._ID
+
+    @ID.setter
+    def ID(self, value):
+        self._ID = value
+
+
 
     #TODO: Implement deepcopy to copy only relevant properties
 

@@ -166,7 +166,7 @@ class OpenSimUpdateThread(threading.Thread) :
                 self.TotalUpdates += count
                 bulkupdate = sinfo["Updates"]
                 sim = sinfo["Sim"]
-                result = sim["RemoteControl"].BulkDynamics(bulkupdate)
+                result = sim["RemoteControl"].BulkDynamics(bulkupdate, True)
 
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -351,7 +351,7 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
                 vehicle.VehicleName = vname
                 sim["Vehicles"][vname] = vehicle
                 self.Vehicles2Sim[vname] = sim
-                return
+                continue
 
             vuuid = str(uuid.uuid4())
             sim["Vehicles"][vname] = OpenSimVehicle(vname, vtypename, vuuid)
@@ -380,7 +380,7 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
             vname = car.Name
             if vname not in self.Vehicles2Sim :
                 self.__Logger.warn("attempt to delete unknown vehicle %s" % (vname))
-                return True
+                continue
             sim = self.Vehicles2Sim[vname]
 
             vehicle = sim["Vehicles"][car.Name]
@@ -405,17 +405,19 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
     # -----------------------------------------------------------------
     def HandleObjectDynamicsEvent(self) :
         changed = self.frame.changed(MovingVehicle)
+        if len(changed) == 0:
+            self.__Logger.debug("No new updates this tick.")
         for car in changed:
             vname = car.Name
             if vname not in self.Vehicles2Sim :
                 self.__Logger.warn("attempt to update unknown vehicle %s" % (vname))
-                return True
+                continue
 
             sim = self.Vehicles2Sim[vname]
             vehicle = sim["Vehicles"][vname]
 
             deltat = self.CurrentTime - vehicle.LastUpdate.UpdateTime
-            if deltat == 0 : return True
+            if deltat == 0 : continue
 
             # Save the dynamics information, acceleration is only needed in the tween update
             update = OpenSimVehicleDynamics()
@@ -438,7 +440,8 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
             if vehicle.InUpdateQueue :
                 vehicle.TweenUpdate = tween
                 vehicle.LastUpdate = update
-                return True
+                self.__Logger.debug("Vehicle %s already in queue", vname)
+                continue
 
             # check to see if the change in position or velocity is signficant enough to
             # warrant sending an update, emphasize velocity changes because dead reckoning
@@ -454,7 +457,8 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
                     ipos = vehicle.TweenUpdate.InterpolatePosition(ideltat)
                     if ipos.ApproxEquals(tween.Position,self.PositionDelta) :
                         self.Interpolated += 1
-                        return True
+                        self.__Logger.debug("No significant change for vehicle %s in this tick", vname)
+                        continue
 
             vehicle.TweenUpdate = tween
             vehicle.LastUpdate = update
@@ -465,6 +469,7 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
             # print "Queue size %d" % (self.WorkQ.qsize())
 
             self.WorkQ.put(vname)
+            self.__Logger.debug("Vehicle %s at %s, queue size: %s", car.Name, car.Position, self.WorkQ.qsize())
 
             # print "Moved vehicle " + vname + " with id " + str(vehicle) + " to location " + str(update.Position)
         return True

@@ -138,13 +138,14 @@ def SetupLoggers() :
 
     logfile = filename=os.path.join(os.path.dirname(__file__), "../logs/mobdat.log")
     flog = logging.handlers.RotatingFileHandler(logfile, maxBytes=10*1024*1024, backupCount=50, mode='w')
+    flog.setLevel(logging.WARN)
     flog.setFormatter(logging.Formatter('%(levelname)s [%(name)s] %(message)s'))
     logger.addHandler(flog)
 
     clog = logging.StreamHandler()
     #clog.addFilter(logging.Filter(name='mobdat'))
     clog.setFormatter(logging.Formatter('[%(name)s] %(message)s'))
-    clog.setLevel(logging.WARN)
+    clog.setLevel(logging.DEBUG)
     logger.addHandler(clog)
 
 # -----------------------------------------------------------------

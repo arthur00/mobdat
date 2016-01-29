@@ -40,9 +40,12 @@ the social (people) aspects of the mobdat simulation.
 
 import os, sys
 import logging
-from mobdat.simulator.DataModel import Vehicle
+from mobdat.simulator.DataModel import Vehicle, PersonNode, BusinessNode,\
+    ResidentialNode, Road, SimulationNode
 from cadis.common.IFramed import Producer, GetterSetter
 from cadis.common import IFramed
+import json
+from uuid import UUID
 
 sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
@@ -54,8 +57,8 @@ import BaseConnector, EventHandler, EventTypes, Traveler
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-@Producer(Vehicle)
-@GetterSetter(Vehicle)
+@Producer(Vehicle, PersonNode, BusinessNode, Road, ResidentialNode, SimulationNode)
+@GetterSetter(Vehicle, PersonNode, BusinessNode, Road, ResidentialNode, SimulationNode)
 class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
            
     # -----------------------------------------------------------------
@@ -68,15 +71,21 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
         self.MaximumTravelers = int(settings["General"].get("MaximumTravelers", 0))
         self.TripCallbackMap = {}
         self.TripTimerEventQ = []
+        self.DataFolder = settings["General"]["Data"]
 
         self.Travelers = {}
         self.CreateTravelers()
 
+        self.AddBuildings()
         self.__Logger.warn('SocialConnector initialization complete')
 
     # -----------------------------------------------------------------
     def AddTripToEventQueue(self, trip) :
         heapq.heappush(self.TripTimerEventQ, trip)
+
+    # -----------------------------------------------------------------
+    def AddBuildings(self) :
+        pass
 
     # -----------------------------------------------------------------
     def CreateTravelers(self) :
@@ -205,11 +214,80 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
     def HandleShutdownEvent(self, event) :
         pass
 
+    def __decode__(self, jsonlist, typeObj):
+        objlist = []
+        for data in jsonlist:
+            obj = typeObj.__new__(typeObj)
+            for dim in obj._dimensions:
+                prop = getattr(obj, dim._name)
+                if hasattr(prop, "__decode__"):
+                    prop = prop.__decode__(data[dim._name])
+                else:
+                    prop = data[dim._name]
+                setattr(obj, dim._name, prop)
+            if "ID" in data:
+                obj.ID = UUID(data["ID"])
+            else:
+                obj.ID = None
+            objlist.append(obj)
+        return objlist
+
     # -----------------------------------------------------------------
     def initialize(self) :
+
+        if self.DataFolder:
+            try:
+                f = open(os.path.join(self.DataFolder,"people.js"), "r")
+                jsonlist = json.loads(f.read())
+                self.people = self.__decode__(jsonlist, PersonNode)
+                f.close()
+                for person in self.people:
+                    self.frame.add(person)
+            except:
+                self.__Logger.exception("could not read data from people.js")
+
+            try:
+                f = open(os.path.join(self.DataFolder,"business.js"), "r")
+                jsonlist = json.loads(f.read())
+                self.business = self.__decode__(jsonlist, BusinessNode)
+                f.close()
+                for business in self.business:
+                    self.frame.add(business)
+            except:
+                self.__Logger.exception("could not read data from business.js")
+
+            try:
+                f = open(os.path.join(self.DataFolder,"residential.js"), "r")
+                jsonlist = json.loads(f.read())
+                self.residential = self.__decode__(jsonlist, ResidentialNode)
+                f.close()
+                for residence in self.residential:
+                    self.frame.add(residence)
+            except:
+                self.__Logger.exception("could not read data from residential.js")
+
+            try:
+                f = open(os.path.join(self.DataFolder,"roads.js"), "r")
+                jsonlist = json.loads(f.read())
+                self.cadis_roads = self.__decode__(jsonlist, Road)
+                f.close()
+                for road in self.cadis_roads:
+                    self.frame.add(road)
+            except:
+                self.__Logger.exception("could not read data from roads.js")
+
+            try:
+                f = open(os.path.join(self.DataFolder,"intersections.js"), "r")
+                jsonlist = json.loads(f.read())
+                self.intersections = self.__decode__(jsonlist, SimulationNode)
+                f.close()
+                for intersection in self.intersections:
+                    self.frame.add(intersection)
+            except:
+                self.__Logger.exception("could not read data from roads.js")
         #self.SubscribeEvent(EventTypes.EventDeleteObject, self.HandleDeleteObjectEvent)
         #self.SubscribeEvent(EventTypes.TimerEvent, self.HandleTimerEvent)
         #self.SubscribeEvent(EventTypes.ShutdownEvent, self.HandleShutdownEvent)
-        pass
+        self.__Logger.info("Simulation started!")
         # all set... time to get to work!
         #self.HandleEvents()
