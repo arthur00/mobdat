@@ -8,9 +8,12 @@ import logging
 from cadis.language.schema import dimension, Set, SubSet, CADIS, dimensions, sets, subsets, primarykey
 from collections import namedtuple
 from cadis.frame import Frame
+from cadis.simulation.JSONData import JSON
+from cadis.generators import classgenerator
 
 import traceback
 
+classgenerator.generate(JSON, attachTo=__name__)
 
 logger = logging.getLogger(__name__)
 LOG_HEADER = "[DATAMODEL]"
@@ -51,7 +54,7 @@ class Vector3(object):
         return Vector3(dic['X'], dic['Y'], dic['Z'])
 
 @Set
-class Car(CADIS):
+class Car(PhysicalObject):
     '''
     classdocs
     '''
@@ -67,23 +70,9 @@ class Car(CADIS):
     def ID(self, value):
         self._ID = value
 
+    # Default Values
     _Position = Vector3(0, 0, 0)
-    @dimension
-    def Position(self):
-        return self._Position
-
-    @Position.setter
-    def Position(self, value):
-        self._Position = value
-
     _Velocity = Vector3(0, 0, 0)
-    @dimension
-    def Velocity(self):
-        return self._Velocity
-
-    @Velocity.setter
-    def Velocity(self, value):
-        self._Velocity = value
 
     _Color = Color.White
     @dimension

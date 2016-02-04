@@ -102,7 +102,7 @@ class SimpleStore(IStore):
 
     def register(self, sim):
         self.updates4sim[sim] = {}
-        for t in schema.sets.union(schema.permutationsets):
+        for t in schema.sets.union(schema.subsets, schema.permutationsets):
             self.updates4sim[sim][t] = FrameUpdate(t, self.store)
 
     def insert(self, obj, sim):
