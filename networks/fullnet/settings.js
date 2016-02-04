@@ -7,7 +7,8 @@
         "StartTimeOfDay" : 7.0,
         "MaximumTravelers" : 100,
 		"WorldInfoFile" : "worldinfo.js",
-        "Connectors" : ["sumo", "social", "opensim"]
+		"Data" : "data",
+        "Connectors" : ["social", "sumo"]
     },
 
     "Builder" :

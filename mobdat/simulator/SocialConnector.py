@@ -40,7 +40,7 @@ the social (people) aspects of the mobdat simulation.
 
 import os, sys
 import logging
-from mobdat.simulator.DataModel import Vehicle, PersonNode, BusinessNode,\
+from mobdat.simulator.DataModel import Vehicle, Person, BusinessNode,\
     ResidentialNode, Road, SimulationNode
 from cadis.common.IFramed import Producer, GetterSetter
 from cadis.common import IFramed
@@ -57,8 +57,8 @@ import BaseConnector, EventHandler, EventTypes, Traveler
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-@Producer(Vehicle, PersonNode, BusinessNode, Road, ResidentialNode, SimulationNode)
-@GetterSetter(Vehicle, PersonNode, BusinessNode, Road, ResidentialNode, SimulationNode)
+@Producer(Vehicle, Person, BusinessNode, Road, ResidentialNode, SimulationNode)
+@GetterSetter(Vehicle, Person, BusinessNode, Road, ResidentialNode, SimulationNode)
 class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
            
     # -----------------------------------------------------------------
@@ -197,11 +197,22 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
         """
         self.CurrentStep = self.frame.step
 
+        if self.CurrentStep % 25 == 0:
+            if not self.mybusiness:
+                bn = BusinessNode()
+                bn.Name = "Amazon"
+                bn.PeakCustomerCount = 0
+                self.frame.add(bn)
+                self.mybusiness = bn
+            else:
+                self.mybusiness.PeakCustomerCount += 1
+
         if self.CurrentStep % 100 == 0 :
             wtime = self.WorldTime
             qlen = len(self.TripTimerEventQ)
             stime = self.TripTimerEventQ[0].ScheduledStartTime if self.TripTimerEventQ else 0.0
             self.__Logger.info('at time %0.3f, timer queue contains %s elements, next event scheduled for %0.3f', wtime, qlen, stime)
+
 
         while self.TripTimerEventQ :
             if self.TripTimerEventQ[0].ScheduledStartTime > self.WorldTime :
@@ -234,12 +245,13 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
 
     # -----------------------------------------------------------------
     def initialize(self) :
+        self.mybusiness = None
 
         if self.DataFolder:
             try:
                 f = open(os.path.join(self.DataFolder,"people.js"), "r")
                 jsonlist = json.loads(f.read())
-                self.people = self.__decode__(jsonlist, PersonNode)
+                self.people = self.__decode__(jsonlist, Person)
                 f.close()
                 for person in self.people:
                     self.frame.add(person)

@@ -283,12 +283,7 @@ class Frame(object):
         for t in self.pushlist:
             for primkey in self.pushlist[t].keys():
                 if primkey not in self.newlyproduced[t] and primkey in self.storebuffer[t]:
-                    obj = self.storebuffer[t][primkey]
-                    for propname in self.pushlist[t][primkey].keys():
-                        #logger.debug("Setting attributes in pushlist for ID %s: %s = %s",primkey,propname,self.pushlist[t][primkey][propname])
-                        setattr(obj, propname, self.pushlist[t][primkey][propname])
-                    # TODO: This should be an update, not an insert
-                    Frame.Store.insert(obj, self)
+                    Frame.Store.update(t, primkey, self, self.pushlist[t][primkey])
                 else:
                     logger.error("[%s] Could not find superset object for object ID %s. Pushlist: %s", self.app, primkey, self.pushlist[t])
             self.pushlist[t] = {}

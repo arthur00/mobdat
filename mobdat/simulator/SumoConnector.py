@@ -50,7 +50,7 @@ from cadis.common import IFramed
 from cadis.common.IFramed import GetterSetter, Producer
 from cadis.language.schema import CADIS
 from mobdat.common import ValueTypes
-from mobdat.simulator.DataModel import Vehicle
+from mobdat.simulator.DataModel import Vehicle, BusinessNode
 import traci.constants as tc
 
 
@@ -65,7 +65,7 @@ sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 @Producer(Vehicle)
-@GetterSetter(Vehicle)
+@GetterSetter(Vehicle, BusinessNode)
 class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
 
     # -----------------------------------------------------------------
@@ -202,7 +202,7 @@ class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
             car.Position = self.__NormalizeCoordinate(info[tc.VAR_POSITION])
             car.Rotation = self.__NormalizeAngle(info[tc.VAR_ANGLE])
             car.Velocity = self.__NormalizeVelocity(info[tc.VAR_SPEED], info[tc.VAR_ANGLE])
-            self.__Logger.debug("Vehicle %s at %s", car.Name, car.Position)
+            self.__Logger.info("Vehicle %s at %s", car.Name, car.Position)
             #event = EventTypes.EventObjectDynamics(v, pos, ang, vel)
             #self.PublishEvent(event)
 
@@ -239,6 +239,10 @@ class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
             self.HandleDepartedVehicles()
             self.HandleVehicleUpdates()
             self.HandleArrivedVehicles()
+
+            business_updates = self.frame.changed(BusinessNode)
+            for bus in business_updates:
+                self.__Logger.info("Updated Business Node %s", bus.Name)
 
             if (self.CurrentStep % int(5.0 / self.Interval)) == 0:
                 self.__Logger.info('[%s] number of vehicles in simulation: %s', self.CurrentStep, len(self.cars.keys()))

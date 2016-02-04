@@ -40,7 +40,7 @@ The functions in this file will rez a mobdat network in an OpenSim region.
 import os, sys
 import logging
 from mobdat.simulator.DataModel import Road, SimulationNode, BusinessNode,\
-    ResidentialNode, PersonNode, VehicleInfo, JobDescription
+    ResidentialNode, Person, VehicleInfo, JobDescription
 from mobdat.common.ValueTypes import Vector3
 from cadis.language.schema import CADISEncoder
 
@@ -212,7 +212,7 @@ class DataBuilder :
 
     # -----------------------------------------------------------------
     def CreatePerson(self, name, node, list_nodes):
-        person = PersonNode()
+        person = Person()
         person.Vehicle = VehicleInfo(node.Vehicle.VehicleName, node.Vehicle.VehicleType)
         jobd = node.JobDescription.JobDescription
         person.JobDescription = JobDescription(jobd.Salary, jobd.FlexibleHours, jobd.Schedule)
@@ -278,7 +278,6 @@ class DataBuilder :
                 simnode.Center = Vector3(p1x, p1y, p1z)
                 simnode.Angle = 90.0 * rot
                 simnode.Width = node.EdgeMap.Widths(scale=self.WorldScale)
-                simnode.Type = node.IntersectionType.Dump()
                 list_nodes.append(simnode)
                 success = True
             else:

@@ -5,10 +5,11 @@ Created on Dec 14, 2015
 '''
 
 import logging
-from copy import deepcopy
+from copy import deepcopy, copy
 import json
 import threading
 from uuid import UUID
+import sys
 logger = logging.getLogger(__name__)
 LOG_HEADER = "[SCHEMA]"
 
@@ -38,38 +39,21 @@ def foreignkey(relatedto):
         return prop
     return wrapped
 
-def dimensionof(cls):
-    def wrapped(func):
-        found = False
-        for dim in dimensions[cls]:
-            if dim._name == func.func_name:
-                prop = Property(func)
-                found = True
-        if not found:
-            raise Exception("Could not find property %s in parent class %s" % func.func_name, cls)
-        return prop
-    return wrapped
-
-
 def primarykey(func):
     prop = PrimaryProperty(func)
     return prop
 
-def Permutation(*args):
-    def wrapped(cls):
-        cls._dimensions = dimensions[cls]
-        for of in args:
-            if of in permutations:
-                permutations[of].append(cls)
-            else:
-                permutations[of] = [cls]
-            permutedclss[cls] = of
-            permutationsets.add(cls)
-        #for prop in cls.__import_dimensions__:
-        #    cls._dimensions.append(prop)
-        #    setattr(cls, prop._name, prop.fget(prop._of))
-        return cls
-    return wrapped
+def PermutedSet(cls):
+    cls._dimensions = dimensions[cls]
+    permutedclss[cls] = []
+    for of in cls.__dimensiontable__.values():
+        if of in permutations:
+            permutations[of].append(cls)
+        else:
+            permutations[of] = [cls]
+        permutedclss[cls].append(of)
+        permutationsets.add(cls)
+    return cls
 
 def Set(cls):
     cls._dimensions = dimensions[cls]
@@ -84,6 +68,7 @@ def SubSet(of):
         else:
             subsetsof[of] = [cls]
         setsof[cls] = of
+        cls._subset = True
         return cls
     return wrapped
 
@@ -117,18 +102,11 @@ class Property(property):
         if hasattr(schema_data, 'frame'):
             frame = schema_data.frame
             if frame.track_changes and not hasattr(self, "_primarykey"):
-                if self._of in sets:
+                if self._of in sets or self._of in permutedclss:
                     superset = self._of
                 else:
                     superset = setsof[self._of]
-                #Schema.frame.set_property(superset, obj, value, self._name)
                 frame.set_property(superset, obj, value, self._name)
-                #pushlist = Schema.frame.pushlist[superset]
-                #if obj._primarykey not in pushlist:
-                #    pushlist[superset][obj._primarykey] = {}
-
-                # Save the property update
-                #pushlist[superset][obj._primarykey][self._name] = value
         property.__set__(self, obj, value)
 
 class PrimaryProperty(Property):
@@ -137,25 +115,20 @@ class PrimaryProperty(Property):
 class MetaCADIS(type):
     def __new__(cls, name, bases, namespace, **kwds):
         result = type.__new__(cls, name, bases, dict(namespace))
-        dimensions[result] = []
-        if "__import_dimensions__" in namespace:
-            for prop in namespace["__import_dimensions__"]:
-                #prop._of = result
-                #newprop = property(prop.fget, prop.fset, None, "I'm the 'x' property.")
-                dimensions[result].append(prop)
-                setattr(result, "_" + prop._name, prop.fget(prop._of))
-                setattr(result, prop._name, prop)
-        for value in namespace.values():
-            if hasattr(value, '_dimension'):
-                dimensions[result].append(value)
-                value._of = result
-            if hasattr(value, '_primarykey'):
-                result._primarykey = value
-                dimensions[result].append(value)
-                value._of = result
-        #dimensions[result] = [
-        #    value for value in namespace.values() if hasattr(value, '_dimension')]
         result._FULLNAME = PREFIX + name
+        if name.startswith("__Storage__") or name.startswith("__Permutation__"):
+            return result
+        else:
+            dimensions[result] = []
+
+            for value in namespace.values():
+                if hasattr(value, '_dimension'):
+                    dimensions[result].append(value)
+                    value._of = result
+                if hasattr(value, '_primarykey'):
+                    result._primarykey = value
+                    dimensions[result].append(value)
+                    value._of = result
         return result
 
 
@@ -175,8 +148,107 @@ class CADIS(object):
         self._ID = value
 
 
+class MetaPermutation(type):
+    def __new__(cls, name, bases, namespace, **kwds):
+        result = type.__new__(cls, name, bases, dict(namespace))
+        dimensions[result] = []
+        if "__import_dimensions__" in namespace:
+            result.__dimensiontable__ = {}
+            for prop in namespace["__import_dimensions__"]:
+                result.__dimensiontable__[prop._name] = prop._of
+                # TODO: Allow a class to be passed here, meaning "import all properties from class"
+                dimensions[result].append(prop)
+                setattr(result, "_" + prop._name, prop.fget(prop._of))
+                setattr(result, prop._name, prop)
 
-    #TODO: Implement deepcopy to copy only relevant properties
+            #result._dimensions = dimensions[cls]
+        for value in namespace.values():
+            if hasattr(value, '_dimension'):
+                dimensions[result].append(value)
+                value._of = result
+            if hasattr(value, '_primarykey'):
+                result._primarykey = value
+                dimensions[result].append(value)
+                value._of = result
+        result._FULLNAME = PREFIX + name
+        return result
+
+
+class Permutation(object):
+    __metaclass__ = MetaPermutation
+
+    def __init__(self):
+        pass
+
+    _ID = None
+    @primarykey
+    def ID(self):
+        return self._ID
+
+    @ID.setter
+    def ID(self, value):
+        self._ID = value
+
+permutedtypes = {}
+storagetypes = {}
+
+#===============================================================================
+# def PermutedObjectFactory(obj):
+#     typestr = "__Permuted__" + obj._FULLNAME
+#     if typestr not in permutedtypes:
+#         newclass = type("__Permuted__" + obj._FULLNAME, (CADIS,), {"__init__" :  CADIS.__init__})
+#         permutedtypes[typestr] = newclass
+#     else:
+#         newclass = permutedtypes[typestr]
+#     newclass.__dimensiontable__ = copy(obj.__dimensiontable__)
+#     newobj = newclass()
+#     newobj.ID = obj.ID
+#     for prop in dimensions[obj.__class__]:
+#         if prop._of == obj.__class__:
+#             setattr(newobj, prop._name, getattr(obj, prop._name))
+#     return newobj
+#===============================================================================
+
+def StorageObjectFactory(obj):
+    # Build the storage object
+    typestr = "__Storage__" + obj._FULLNAME
+    if typestr not in storagetypes:
+        newstclass = type("__Storage__" + obj._FULLNAME, (CADIS,), {"__init__" :  CADIS.__init__})
+        newstclass.__dimensiontable__ = copy(obj.__dimensiontable__)
+        storagetypes[typestr] = newstclass
+    else:
+        newstclass = storagetypes[typestr]
+    stoobj = newstclass()
+    stoobj.ID = obj.ID
+    stoobj._storageobj = True
+    stoobj._originalcls = obj.__class__
+    stoobj.objectlinks = {}
+
+    #Build the permuted version of the object
+    typestr = "__Permuted__" + obj._FULLNAME
+    if typestr not in permutedtypes:
+        newpclass = type("__Permuted__" + obj._FULLNAME, (CADIS,), {"__init__" :  CADIS.__init__})
+        permutedtypes[typestr] = newpclass
+    else:
+        newpclass = permutedtypes[typestr]
+    newobj = newpclass()
+    newobj._dimensions = set()
+    newobj.ID = obj.ID
+    for prop in dimensions[obj.__class__]:
+        if prop._of == obj.__class__:
+            setattr(newobj, prop._name, getattr(obj, prop._name))
+            newobj._dimensions.add(prop)
+
+    stoobj.objectlinks[obj.__class__] = newobj
+    return stoobj
+
+def PermutationObjectfactory(sobj):
+    ret_obj = sobj._originalcls()
+    for o in sobj.objectlinks.values():
+        for prop in o._dimensions:
+            value = getattr(o, prop._name)
+            setattr(ret_obj, prop._name, value)
+    return ret_obj
 
 class CADISEncoder(json.JSONEncoder):
     def default(self, obj):

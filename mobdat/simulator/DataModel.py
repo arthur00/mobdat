@@ -5,7 +5,7 @@ Created on Dec 26, 2015
 '''
 import logging
 from cadis.language.schema import dimension, Set, SubSet, CADIS, dimensions, sets, subsets, primarykey,\
-    Permutation, dimensionof, foreignkey
+    Permutation, foreignkey, PermutedSet
 from collections import namedtuple
 from cadis.frame import Frame
 import uuid
@@ -36,15 +36,6 @@ class SimulationNode(CADIS):
     @Angle.setter
     def Angle(self, value):
         self._Angle = value
-
-    _Type = {}
-    @dimension
-    def Type(self):
-        return self._Type
-
-    @Type.setter
-    def Type(self, value):
-        self._Type = value
 
     _Name = None
     @dimension
@@ -105,10 +96,10 @@ class Road(CADIS):
     def Type(self, value):
         self._Type = value
 
-@Permutation(SimulationNode)
-class BusinessNode(CADIS):
+@PermutedSet
+class BusinessNode(Permutation):
     ### Properties from SimulationNode
-    __import_dimensions__ = [ SimulationNode.Center, SimulationNode.Angle, SimulationNode.Type, SimulationNode.Name ]
+    __import_dimensions__ = [ SimulationNode.Center, SimulationNode.Angle, SimulationNode.Name ]
     ### New properties
     _CustomersPerNode = 0
     @dimension
@@ -155,11 +146,10 @@ class BusinessNode(CADIS):
     def PeakCustomerCount(self, value):
         self._PeakCustomerCount = value
 
-
-@Permutation(SimulationNode)
-class ResidentialNode(CADIS):
+@PermutedSet
+class ResidentialNode(Permutation):
     ### Properties from SimulationNode
-    __import_dimensions__ = [ SimulationNode.Center, SimulationNode.Angle, SimulationNode.Type, SimulationNode.Name ]
+    __import_dimensions__ = [ SimulationNode.Center, SimulationNode.Angle, SimulationNode.Name ]
 
         ### New properties
     _ResidentsPerNode = 0
@@ -209,7 +199,7 @@ class VehicleInfo(object):
 
 
 @Set
-class PersonNode(CADIS):
+class Person(CADIS):
     def __init__(self):
         self.ID = uuid.uuid4()
 
