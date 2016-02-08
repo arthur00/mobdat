@@ -237,7 +237,7 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
     def initialize(self, limit = None) :
         self.mybusiness = None
         # Limit the number of objects for testing purposes
-        plimit = 100
+        plimit = None
         rlimit = None
         blimit = None
         if self.DataFolder:
@@ -246,7 +246,7 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
                 jsonlist = json.loads(f.read())
                 self.people = self.__decode__(jsonlist, Person)
                 f.close()
-                for person in self.people[:limit]:
+                for person in self.people[:plimit]:
                     self.frame.add(person)
             except:
                 self.__Logger.exception("could not read data from people.js")

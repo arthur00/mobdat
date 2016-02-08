@@ -27,18 +27,17 @@ class PrimeSimulator(IFramed):
 
     def update(self):
         self.CurrentStep = self.frame.step
-        if self.CurrentStep % 4 == 0 :
-            if not self.mybusiness:
-                a = self.frame.get(EmptyBusiness)
-                if len(a) > 0:
-                    pn = PrimeNode()
-                    pn.ID = a[0].ID
-                    pn.Name = "Amazon"
-                    pn.PeakCustomerCount = 0
-                    pn.Rezcap = a[0].Rezcap
-                    self.frame.add(pn)
-                    self.mybusiness = pn
-                    self.frame.disable_subset(EmptyBusiness)
+        if not self.mybusiness:
+            a = self.frame.get(EmptyBusiness)
+            if len(a) > 0:
+                pn = PrimeNode()
+                pn.ID = a[0].ID
+                pn.Name = "Amazon"
+                pn.PeakCustomerCount = 0
+                pn.Rezcap = a[0].Rezcap
+                self.frame.add(pn)
+                self.mybusiness = pn
+                self.frame.disable_subset(EmptyBusiness)
 
         if self.mybusiness and not self.mybusiness.Customers:
             ppl = self.frame.get(Person)
@@ -57,7 +56,6 @@ class PrimeSimulator(IFramed):
                 self.__Logger.info("Delivery schedule: %s", self.schedule_deliveries.keys())
 
         if self.CurrentStep in self.schedule_deliveries:
-            print self.schedule_deliveries[self.CurrentStep]
             for c in self.schedule_deliveries[self.CurrentStep]:
                 if hasattr(c.LivesAt, "Rezcap"):
                     v = Vehicle()

@@ -455,11 +455,7 @@ class Frame(object):
         return copy(self.del_storebuffer[t].values())
 
     def changed(self, t):
-        if len(self.mod_storebuffer[t].keys()):
-            #logger.debug("objects with IDs %s have changed", self.mod_storebuffer[t].keys())
-            return copy(self.mod_storebuffer[t].values())
-        else:
-            return []
+        return copy(self.mod_storebuffer[t].values())
 
     def __deepcopy__(self, memo):
         return self
