@@ -46,6 +46,7 @@ from cadis.common.IFramed import Producer, GetterSetter
 from cadis.common import IFramed
 import json
 from uuid import UUID
+from cadis.frame import instrument
 
 sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
@@ -188,6 +189,7 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
         trip.TripCompleted(self)
 
     # -----------------------------------------------------------------
+    @instrument
     def update(self) :
         """
         HandleTimerEvent -- timer event happened, process pending events from

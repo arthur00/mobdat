@@ -13,7 +13,44 @@ import logging
 import threading
 from __builtin__ import type
 from cadis.language.schema import StorageObjectFactory,\
-    PermutationObjectfactory, permutationsets
+    PermutationObjectfactory, permutationsets, subsets
+
+class SubSetFrameUpdate(object):
+    def __init__(self, t, store):
+        self.objtype = schema.setsof[t]
+        self.subsettype = t
+        self.store = store
+        self.objectids = set()
+        self.object_dicts = {}
+
+    def get_update(self, objids):
+        tmp_object_dicts = {}
+        # Calculate set of new objects since last query
+        new = []
+        for primkey in objids.difference(self.objectids):
+            newobj = self.store[self.objtype][primkey]
+            new.append(primkey)
+            tmp_object_dicts[primkey] = str(newobj.__dict__)
+
+        # Calculate set of deleted objects
+        deleted = []
+        for primkey in self.objectids.difference(objids):
+            deleted.append(primkey)
+
+        # Calculate set of modified objects
+        mod = []
+        for primkey in objids.intersection(self.objectids):
+            newobj = self.store[self.objtype][primkey]
+            strdictnew = str(newobj.__dict__)
+            if strdictnew != self.object_dicts[primkey]:
+                mod.append(primkey)
+                tmp_object_dicts[primkey] = strdictnew
+            else:
+                tmp_object_dicts[primkey] = self.object_dicts[primkey]
+
+        self.object_dicts = tmp_object_dicts
+        self.objectids = set(self.object_dicts.keys())
+        return (new, mod, deleted)
 
 class FrameUpdate(object):
     def __init__(self, t, store):
@@ -72,7 +109,7 @@ class FrameUpdate(object):
             else:
                 updated.append(deepcopy(self.store[self.objtype][key]))
         for key in cp_deleted:
-            deleted.append(deepcopy(self.store[self.objtype][key]))
+            deleted.append(key)
 
         return (added, updated, deleted)
 
@@ -108,6 +145,8 @@ class SimpleStore(IStore):
         self.updates4sim[sim] = {}
         for t in schema.sets.union(schema.permutationsets):
             self.updates4sim[sim][t] = FrameUpdate(t, self.store)
+        for t in schema.subsets:
+            self.updates4sim[sim][t] = SubSetFrameUpdate(t, self.store)
 
     def insert(self, obj, sim):
         with self.lock:
@@ -233,13 +272,13 @@ class SimpleStore(IStore):
         else:
             self.__Logger.error("Could not find key %s for object type %s",key, typeObj)
 
-    def updated(self, typeObj, sim):
+    def getupdated(self, typeObj, sim):
         with self.lock:
             if typeObj in self.subsets:
-                res = deepcopy(typeObj.query(self))
-                for o in res:
-                    o.__class__ = typeObj
-                return (res, res, [])
+                res = typeObj.query(self)
+                #for o in res:
+                #    o.__class__ = typeObj
+                return self.updates4sim[sim][typeObj].get_update(res)
             else:
                 return self.updates4sim[sim][typeObj].updatelist(True)
 

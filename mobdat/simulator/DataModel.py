@@ -379,7 +379,7 @@ class Vehicle(CADIS):
 class MovingVehicle(Vehicle):
     @staticmethod
     def query(store):
-        return [c for c in store.get(Vehicle) if c.Position != None or c.Position == (0,0,0)]  # @UndefinedVariable
+        return set([c.ID for c in store.get(Vehicle) if c.Position != None or c.Position == (0,0,0)])  # @UndefinedVariable
 
 if __name__ == "__main__":
     test = ResidentialNode()

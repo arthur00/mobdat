@@ -39,10 +39,7 @@ def foreignkey(relatedto):
         setattr(prop, "_foreignkey", True)
         setattr(prop, "_relatedto", relatedto._in)
         setattr(prop, "_foreignprop", relatedto)
-#         if not hasattr(relatedto._of, '_uniquedict'):
-#             setattr(relatedto._of, '_uniquedict', {})
-#        relatedto._of._uniquedict[relatedto._name] = {}
-        setattr(relatedto,'_unique', True)
+        setattr(relatedto,'_keyof', prop)
         return prop
     return wrapped
 
@@ -84,29 +81,6 @@ def dimension(func):
     prop = Property(func)
     return prop
 
-# class MetaProperty(type):
-#     def __new__(cls, name, bases, namespace, **kwds):
-#         result = type.__new__(cls, name, bases, dict(namespace))
-#         setattr(result, "_dimension", True)
-#         setattr(result, "_name", None)
-#         #result._dimension = True
-#         #result._name = None
-#         return result
-#
-# class MetaPropertyPrimaryKey(MetaProperty):
-#     def __new__(cls, name, bases, namespace, **kwds):
-#         result = type.__new__(cls, name, bases, dict(namespace))
-#         setattr(result, "_primarykey", True)
-#         #result._primarykey = True
-#         return result
-#
-# class MetaPropertyForeignKey(MetaProperty):
-#     def __new__(cls, name, bases, namespace, **kwds):
-#         result = type.__new__(cls, name, bases, dict(namespace))
-#         #result._foreignkey = True
-#         setattr(result, "_foreignkey", True)
-#         return result
-
 class Property(property):
     def __init__(self, getter, setter=None, *args, **kwargs):
         if getter:
@@ -141,18 +115,7 @@ class Property(property):
                     res = frame.findproperty(self._relatedto, fname, value)
                     if not res:
                         self.__Logger.error("could not match foreign key %s = %s to existing object of type %s", self._name, value, self._relatedto)
-#             if hasattr(self, '_unique'):
-#                 if not obj._primarykey:
-#                     obj._primarykey = uuid4()
-#                 self._of._uniquedict[self._name][value] = obj._primarykey
-
         property.__set__(self, obj, value)
-
-# class PrimaryProperty(Property):
-#     __metaclass__ = MetaPropertyPrimaryKey
-#
-# class ForeignKeyProperty(Property):
-#     __metaclass__ = MetaPropertyForeignKey
 
     def __relatedto__(self, relatedto):
         self._relatedto = relatedto._of
@@ -220,37 +183,8 @@ class MetaPermutation(MetaCADIS):
 class Permutation(CADIS):
     __metaclass__ = MetaPermutation
 
-#     def __init__(self):
-#         pass
-#
-#     _ID = None
-#     @primarykey
-#     def ID(self):
-#         return self._ID
-#
-#     @ID.setter
-#     def ID(self, value):
-#         self._ID = value
-
 permutedtypes = {}
 storagetypes = {}
-
-#===============================================================================
-# def PermutedObjectFactory(obj):
-#     typestr = "__Permuted__" + obj._FULLNAME
-#     if typestr not in permutedtypes:
-#         newclass = type("__Permuted__" + obj._FULLNAME, (CADIS,), {"__init__" :  CADIS.__init__})
-#         permutedtypes[typestr] = newclass
-#     else:
-#         newclass = permutedtypes[typestr]
-#     newclass.__dimensiontable__ = copy(obj.__dimensiontable__)
-#     newobj = newclass()
-#     newobj.ID = obj.ID
-#     for prop in dimensions[obj.__class__]:
-#         if prop._of == obj.__class__:
-#             setattr(newobj, prop._name, getattr(obj, prop._name))
-#     return newobj
-#===============================================================================
 
 def StorageObjectFactory(obj):
     # Build the storage object

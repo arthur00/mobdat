@@ -5,6 +5,7 @@
 *.project
 *.pydevproject
 worldinfo_backup
+json_data
 build
 layinfo.js
 locinfo.js

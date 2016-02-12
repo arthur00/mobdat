@@ -37,9 +37,15 @@ This file defines the SumoConnector class that translates mobdat events
 and operations into and out of the sumo traffic simulator.
 
 """
+
 import logging
 import math
 import os, sys
+sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
+sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
+sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "lib")))
+
 import platform
 import subprocess
 from sumolib import checkBinary
@@ -52,12 +58,8 @@ from cadis.language.schema import CADIS
 from mobdat.common import ValueTypes
 from mobdat.simulator.DataModel import Vehicle
 import traci.constants as tc
+from cadis.frame import instrument
 
-
-sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
-sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
-sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
-sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "lib")))
 
 
 
@@ -202,7 +204,7 @@ class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
             car.Position = self.__NormalizeCoordinate(info[tc.VAR_POSITION])
             car.Rotation = self.__NormalizeAngle(info[tc.VAR_ANGLE])
             car.Velocity = self.__NormalizeVelocity(info[tc.VAR_SPEED], info[tc.VAR_ANGLE])
-            self.__Logger.info("Vehicle %s at %s", car.Name, car.Position)
+            #self.__Logger.info("Vehicle %s at %s", car.Name, car.Position)
             #event = EventTypes.EventObjectDynamics(v, pos, ang, vel)
             #self.PublishEvent(event)
 
@@ -222,6 +224,7 @@ class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
 
     # -----------------------------------------------------------------
     # Returns True if the simulation can continue
+    @instrument
     def update(self):
         self.CurrentStep += 1
         self.CurrentTime = self.Clock()
@@ -291,6 +294,7 @@ class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
             sumoBinary = checkBinary('sumo.exe')
         else:
             sumoBinary = checkBinary('sumo')
+
         sumoCommandLine = [sumoBinary, "-c", self.ConfigFile, "-l", "sumo.log"]
         self.SumoProcess = subprocess.Popen(sumoCommandLine, stdout=sys.stdout, stderr=sys.stderr)
         traci.init(self.Port)

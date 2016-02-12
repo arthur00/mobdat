@@ -124,6 +124,7 @@ class MobdatController(cmd.Cmd) :
 
         self.__Logger.warn("stopping the timer loop")
 
+        frame_module.SimulatorStartup = True
         # kill the timer if it hasn't already shutdown
         frame_module.SimulatorShutdown = True
 
@@ -190,7 +191,8 @@ def Controller(settings) :
     # send the shutdown event to the connectors
     for connproc in connectors :
         connproc.join()
-
+    print "closing down controller"
+    sys.exit(0)
     # and send the shutdown event to the router
     #event = EventTypes.ShutdownEvent(True)
     #evrouter.RouterQueue.put(event)

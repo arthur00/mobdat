@@ -46,6 +46,7 @@ import OpenSimRemoteControl
 from cadis.common import IFramed
 from mobdat.simulator.DataModel import MovingVehicle, Vehicle
 from cadis.common.IFramed import GetterSetter, Producer
+from cadis.frame import instrument
 
 # we need to import python modules from the $SUMO_HOME/tools directory
 sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
@@ -476,6 +477,7 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
 
     # -----------------------------------------------------------------
     # Returns True if the simulation can continue
+    @instrument
     def update(self) :
         self.CurrentStep = self.frame.step
         self.CurrentTime = self.frame.curtime

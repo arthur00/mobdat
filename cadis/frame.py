@@ -9,28 +9,34 @@ from copy import deepcopy, copy
 from cadis.store.simplestore import SimpleStore
 import logging, sys
 from cadis.store.remotestore import RemoteStore
-from cadis.language.schema import schema_data, CADISEncoder
+from cadis.language.schema import schema_data, CADISEncoder, subsetsof,\
+    setsof, sets as schema_sets, subsets as schema_subsets, permutationsets as schema_permutationsets
 import threading
 import time
 import platform
 import cProfile
 import signal
+import csv
 
 import uuid
 import random
 import StringIO
 import pstats
+import os
+from functools import wraps
+from cadis.common.IFramed import IFramed
 
 logger = logging.getLogger(__name__)
 LOG_HEADER = "[FRAME]"
 
 USE_REMOTE_STORE = True # TODO Convert C# server to accept Strings instead of Integer
 DEBUG = False
+INSTRUMENT = False
 
 SimulatorStartup = False
 SimulatorShutdown = False
-CurrentIteration = 0
-FinalIteration = 0
+
+
 
 class TimerThread(threading.Thread) :
     # -----------------------------------------------------------------
@@ -48,16 +54,12 @@ class TimerThread(threading.Thread) :
 
         self.__Logger = logging.getLogger(__name__)
         self.frame = frame
-
+        self.CurrentIteration = 0
         #self.IntervalTime = float(settings["General"]["Interval"])
         if self.frame.interval:
             self.IntervalTime = self.frame.interval
         else:
             self.IntervalTime = 0.2
-
-        global FinalIteration
-        #FinalIteration = settings["General"].get("TimeSteps",0)
-        FinalIteration = 0
 
         self.Clock = time.time
 
@@ -69,55 +71,96 @@ class TimerThread(threading.Thread) :
     # -----------------------------------------------------------------
     def run(self) :
         global SimulatorStartup, SimulatorShutdown
-        global FinalIteration, CurrentIteration
         global profile
         # Wait for the signal to start the simulation, this allows all of the
         # connectors to initialize
-        while not SimulatorStartup :
+        while not SimulatorStartup:
             time.sleep(5.0)
 
         if DEBUG:
+            if not os.path.exists('stats'):
+                os.mkdir('stats')
             self.profile = cProfile.Profile()
             self.profile.enable()
-            self.__Logger.debug("starting profiler for %s", self.frame.app.__module__)
+            self.__Logger.debug("starting profiler for %s", self.frame.app.__class__.__name__)
+
+        if INSTRUMENT:
+            if not os.path.exists('stats'):
+                os.mkdir('stats')
+            strtime = time.strftime("%Y-%m-%d_%H-%M-%S")
+            self.ifname = os.path.join('stats', "%s_bench_%s.csv" % (strtime, self.frame.app.__class__.__name__))
+            with open(self.ifname, 'w', 0) as csvfile:
+                self.fieldnames = ['delta','pull','update','push','mem buffer', 'mem store']
+                writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
+                writer.writeheader()
+
 
         # Start the main simulation loop
         self.__Logger.debug("start main simulation loop")
         starttime = self.Clock()
 
-        CurrentIteration = 0
+        self.CurrentIteration = 0
         schema_data.frame = self.frame
+
         try:
             while not SimulatorShutdown :
 
-                    if FinalIteration > 0 and CurrentIteration >= FinalIteration :
-                        break
-
                     stime = self.Clock()
-
                     self.frame.execute_Frame()
 
                     etime = self.Clock()
+                    delta = etime - stime
 
-                    if (etime - stime) < self.IntervalTime :
-                        time.sleep(self.IntervalTime - (etime - stime))
+                    if INSTRUMENT:
+                        with open(self.ifname, 'a', 0) as csvfile:
+                        #csv.writer(["%.3f" % delta].append(self.inst_array))
+                            writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
+                            d = self.frame._instruments
+                            d['delta'] = delta
+
+                            if self.CurrentIteration % 10 == 0:
+                                d['mem buffer'] = self.frame.buffersize()
+                            writer.writerow(d)
+                    if delta < self.IntervalTime :
+                        time.sleep(self.IntervalTime - delta)
                     else:
-                        self.__Logger.warn("[%s]: Exceeded interval time by %s" , self.frame.app.__module__, (etime - stime))
+                        self.__Logger.warn("[%s]: Exceeded interval time by %s" , self.frame.app.__module__, delta)
 
-                    CurrentIteration += 1
+                    self.CurrentIteration += 1
         finally:
             if DEBUG:
                 self.profile.disable()
                 self.profile.create_stats()
-                self.profile.dump_stats("stats_%s.ps" % self.frame.app.__module__)
+                self.profile.dump_stats(os.path.join('stats', "%s_stats.ps" % self.frame.app.__class__.__name__))
+            if INSTRUMENT:
+                pass
 
         # compute a few stats
         elapsed = self.Clock() - starttime
-        avginterval = 1000.0 * elapsed / CurrentIteration
-        self.__Logger.warn("%d iterations completed with an elapsed time %f or %f ms per iteration", CurrentIteration, elapsed, avginterval)
+        avginterval = 1000.0 * elapsed / self.CurrentIteration
+        self.__Logger.warn("%d iterations completed with an elapsed time %f or %f ms per iteration", self.CurrentIteration, elapsed, avginterval)
 
         self.frame.stop()
         SimulatorShutdown = True
+
+
+def instrument(f):
+    if not INSTRUMENT:
+        return f
+    else:
+        @wraps(f)
+        def instrument(*args, **kwds):
+            obj = args[0]
+            if isinstance(obj, IFramed):
+                obj = obj.frame
+            start = time.time()
+            ret = f(*args, **kwds)
+            end = time.time()
+            if not hasattr(obj, '_instruments'):
+                obj._instruments = {}
+            obj._instruments[f.__name__] = end-start
+            return ret
+        return instrument
 
 class Frame(object):
     '''
@@ -197,6 +240,13 @@ class Frame(object):
     def join(self):
         self.thread.join()
 
+    def buffersize(self):
+        size = 0
+        for t in self.storebuffer:
+            for o in self.storebuffer[t].values():
+                size += sys.getsizeof(o)
+        return size
+
     def stop(self):
         if self.timer:
             self.timer.cancel()
@@ -212,7 +262,9 @@ class Frame(object):
     def process_declarations(self, app):
         self.produced = app._producer
         self.updated = app._gettersetter
+
         self.observed = set()
+        self.iterate_types = []
         if app._getter:
             self.observed = self.observed.union(app._getter)
         if app._gettersetter:
@@ -232,6 +284,19 @@ class Frame(object):
                     if not fname in self.fkdict[cls]:
                         self.fkdict[cls][fname] = {}
             logger.debug("%s store buffer for type %s", LOG_HEADER, t)
+
+        # When iterating for pull, we should request, in order:
+        # (1) set items
+        # (2) permutations
+        # (3) subsets
+
+        setitems = self.observed.intersection(schema_sets)
+        permutations = self.observed.intersection(schema_permutationsets)
+        subsets = self.observed.intersection(schema_subsets)
+
+        self.iterate_types.extend(setitems)
+        self.iterate_types.extend(permutations)
+        self.iterate_types.extend(subsets)
 
         for t in self.produced:
             self.pushlist[t] = {}
@@ -253,7 +318,6 @@ class Frame(object):
             self.track_changes = True
             self.app.update()
             self.track_changes = False
-            self.prepare_push()
             self.push()
             if self.timer:
                 self.timer = Timer(1.0, self.execute_Frame)
@@ -263,40 +327,64 @@ class Frame(object):
         except:
             logger.exception("uncaught exception: ")
 
+    def _fkobj(self, o):
+        for propname in self.fkdict[o.__class__].keys():
+            propvalue = getattr(o, propname)
+            self.fkdict[o.__class__][propname][propvalue] = o.ID
+
+    def _delfkobj(self, o):
+        for propname in self.fkdict[o.__class__].keys():
+            propvalue = getattr(o, propname)
+            if propvalue in self.fkdict[o.__class__][propname]:
+                del self.fkdict[o.__class__][propname][propvalue]
+
+    @instrument
     def pull(self):
         tmpbuffer = {}
-        for t in self.observed.symmetric_difference(self.subset_disable):
+        for t in self.iterate_types:
+            if t in self.subset_disable:
+                continue
+
             self.new_storebuffer[t] = {}
             self.mod_storebuffer[t] = {}
             self.del_storebuffer[t] = {}
 
-            # if type is subset, it will always recalculate and return as new / updated
-            # TODO: Allow caching of subsets to determine new / updated / deleted
-            if hasattr(Frame.Store, "updated"):
-                (new, mod, deleted) = Frame.Store.updated(t, self)
-                for o in new:
-                    self.storebuffer[t][o._primarykey] = o
-                    self.new_storebuffer[t][o._primarykey] = o
-                    if o.__class__ in self.fkdict:
-                        for propname in self.fkdict[o.__class__].keys():
-                            propvalue = getattr(o, propname)
-                            self.fkdict[o.__class__][propname][propvalue] = o.ID
-                for o in mod:
-                    self.storebuffer[t][o._primarykey] = o
-                    self.mod_storebuffer[t][o._primarykey] = o
-                    if o.__class__ in self.fkdict:
-                        for propname in self.fkdict[o.__class__].keys():
-                            propvalue = getattr(o, propname)
-                            self.fkdict[o.__class__][propname][propvalue] = o.ID
-                for o in deleted:
-                    if o._primarykey in self.storebuffer[t]:
-                        del self.storebuffer[t][o._primarykey]
-                        self.del_storebuffer[t][o._primarykey] = o
-                    if o.__class__ in self.fkdict:
-                        for propname in self.fkdict[o.__class__].keys():
-                            propvalue = getattr(o, propname)
-                            if propvalue in self.fkdict[o.__class__][propname]:
-                                del self.fkdict[o.__class__][propname][propvalue]
+            if hasattr(Frame.Store, "getupdated"):
+                (new, mod, deleted) = Frame.Store.getupdated(t, self)
+                if t in schema_subsets:
+                    pt = setsof[t]
+                    for key in new:
+                        # TODO: Make subsets be calculated after sets
+                        o = copy(self.storebuffer[pt][key])
+                        o.__class__ = t
+                        self.storebuffer[t][key] = o
+                        self.new_storebuffer[t][key] = o
+                    for key in mod:
+                        o = copy(self.storebuffer[pt][key])
+                        o.__class__ = t
+                        self.storebuffer[t][key] = o
+                        self.mod_storebuffer[t][key] = o
+                    for key in deleted:
+                        self.del_storebuffer[t][key] = o
+
+                else:
+                    for o in new:
+                        self.storebuffer[t][o._primarykey] = o
+                        self.new_storebuffer[t][o._primarykey] = o
+                        if o.__class__ in self.fkdict:
+                            self._fkobj(o)
+                    for o in mod:
+                        self.storebuffer[t][o._primarykey] = o
+                        self.mod_storebuffer[t][o._primarykey] = o
+                        if o.__class__ in self.fkdict:
+                            self._fkobj(o)
+                    for o in deleted:
+                        if o._primarykey in self.storebuffer[t]:
+                            del self.storebuffer[t][o._primarykey]
+                            self.del_storebuffer[t][o._primarykey] = o
+                        if o.__class__ in self.fkdict:
+                            self._delfkobj(o)
+
             else:
                 tmpbuffer[t] = {}
                 for o in Frame.Store.get(t):
@@ -322,19 +410,7 @@ class Frame(object):
 
                 self.storebuffer[t] = tmpbuffer[t]
 
-    def prepare_push(self):
-        #for t in self.changedproperties:
-        #    push_key = None
-        #    push_obj = None
-        #    if t in subsets:
-        #        push_key = setsof[t]
-        #
-        #    elif t in sets:
-        #        push_key = t
-        #        for o in self.changedproperties[t]:
-        #            self.pushlist[t][o._primarykey] = o
-        pass
-
+    @instrument
     def push(self):
         for t in self.pushlist:
             for primkey in self.pushlist[t].keys():
@@ -403,7 +479,7 @@ class Frame(object):
                 return o
         return None
 
-    def resolve_fk(self, obj, t):
+    def _resolve_fk(self, obj, t):
         for propname, cls in t._foreignkeys.items():
             propvalue = getattr(obj, propname)
             fname = getattr(t, propname)._foreignprop._name
@@ -415,7 +491,7 @@ class Frame(object):
             if primkey in self.storebuffer[cls]:
                 newobj = self.storebuffer[cls][primkey]
                 if hasattr(cls, '_foreignkeys'):
-                    self.resolve_fk(newobj, cls)
+                    self._resolve_fk(newobj, cls)
                 setattr(obj, propname, newobj)
             # Look up by name, just in case
             else:
@@ -434,7 +510,7 @@ class Frame(object):
             if primkey != None:
                 obj = copy(self.storebuffer[t][primkey])
                 if hasattr(t, '_foreignkeys'):
-                    self.resolve_fk(obj, t)
+                    self._resolve_fk(obj, t)
                 return obj
             else:
                 res = []

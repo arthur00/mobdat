@@ -10,6 +10,7 @@ from prime.PrimeDataModel import PrimeNode, EmptyBusiness
 import logging
 from mobdat.common.ValueTypes import Vector3
 import random
+from cadis.frame import instrument
 
 @Producer(Vehicle, BusinessNode, SimulationNode, PrimeNode)
 @GetterSetter(Vehicle, Person, BusinessNode, ResidentialNode, SimulationNode, PrimeNode, EmptyBusiness)
@@ -25,6 +26,27 @@ class PrimeSimulator(IFramed):
         self.mybusiness = None
         self.__Logger.warn('PrimeSimulator initialization complete')
 
+    def add_deliveries(self):
+        ppl = self.frame.get(Person)
+        if len(ppl) > 40:
+            customers = random.sample(ppl, 10)
+            # Synchronized attribute
+            if not self.mybusiness.Customers:
+                self.mybusiness.Customers = []
+            self.mybusiness.Customers.append([p.Name for p in customers])
+            if not hasattr(self, "CustomerObjects"):
+                self.mybusiness.CustomerObjects = {}
+
+            # Non-synchronized attribute
+            for c in customers:
+                self.mybusiness.CustomerObjects[c.Name] = c
+                starttime = random.randint(self.CurrentStep, self.CurrentStep + 400)
+                if starttime not in self.schedule_deliveries:
+                    self.schedule_deliveries[starttime] = []
+                self.schedule_deliveries[starttime].append(c)
+            self.__Logger.info("Delivery schedule: %s", self.schedule_deliveries.keys())
+
+    @instrument
     def update(self):
         self.CurrentStep = self.frame.step
         if not self.mybusiness:
@@ -39,22 +61,6 @@ class PrimeSimulator(IFramed):
                 self.mybusiness = pn
                 self.frame.disable_subset(EmptyBusiness)
 
-        if self.mybusiness and not self.mybusiness.Customers:
-            ppl = self.frame.get(Person)
-            if len(ppl) > 40:
-                customers = random.sample(ppl, 10)
-                # Synchronized attribute
-                self.mybusiness.Customers = [p.Name for p in customers]
-                self.mybusiness.CustomerObjects = {}
-                # Non-synchronized attribute
-                for c in customers:
-                    self.mybusiness.CustomerObjects[c.Name] = c
-                    starttime = random.randint(50, 100)
-                    if starttime not in self.schedule_deliveries:
-                        self.schedule_deliveries[starttime] = []
-                    self.schedule_deliveries[starttime].append(c)
-                self.__Logger.info("Delivery schedule: %s", self.schedule_deliveries.keys())
-
         if self.CurrentStep in self.schedule_deliveries:
             for c in self.schedule_deliveries[self.CurrentStep]:
                 if hasattr(c.LivesAt, "Rezcap"):
@@ -66,12 +72,8 @@ class PrimeSimulator(IFramed):
                     self.frame.add(v)
                     self.__Logger.info("starting amazon delivery to %s", c.Name)
                 else:
-                    print c.LivesAt
+                    self.__Logger.debug("User %s is homeless (%s)", c.Name, c.LivesAt)
+            del self.schedule_deliveries[self.CurrentStep]
 
-
-
-                #ppl = self.frame.get(Person)
-                #business = self.frame.get(PrimeNode, self.mybusiness)
-                #business.PeakCustomerCount += 1
-                #business.Center = Vector3(self.CurrentStep, 0, 0)
-                #business.Customers.append("worker%s" % self.CurrentStep)
+        if self.mybusiness and len(self.schedule_deliveries) == 0:
+            self.add_deliveries()

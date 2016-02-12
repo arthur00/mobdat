@@ -36,7 +36,7 @@ class EmptyBusiness(BusinessNode):
     def query(store):
         cache = EmptyBusiness.cache
         bns = store.get(BusinessNode, False)
-        res = []
+        res = set()
         ppl = store.get(Person, False)
         for b in bns:
             if b.ID in cache:
@@ -50,5 +50,5 @@ class EmptyBusiness(BusinessNode):
                     cache[b.ID] = p.ID
                     continue
             if not occupied:
-                res.append(b)
+                res.add(b.ID)
         return res

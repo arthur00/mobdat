@@ -250,7 +250,12 @@ class Quaternion :
 
     @staticmethod
     def __decode__(dic):
-        return Quaternion(dic['X'], dic['Y'], dic['Z'], dic['W'])
+        if 'x' in dic and 'y' in dic and 'z' in dic and 'w' in dic:
+            return Vector3(dic['x'], dic['y'], dic['z'], dic['w'])
+        elif 'X' in dic and 'Y' in dic and 'Z' in dic and 'W' in dic:
+            return Vector3(dic['X'], dic['Y'], dic['Z'], dic['W'])
+        else:
+            raise Exception("Could not decode Vector3 with dic %s" % dic)
 
     def __json__(self):
         return self.__dict__
