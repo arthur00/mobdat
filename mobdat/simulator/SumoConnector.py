@@ -335,3 +335,5 @@ class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
         #v1.Name = "Model A BLUE"
         #v1.Type = "Model A BLUE"
         #self.frame.add(v1)
+    def shutdown(self):
+        pass

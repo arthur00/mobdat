@@ -298,3 +298,6 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
         self.__Logger.info("Simulation started!")
         # all set... time to get to work!
         #self.HandleEvents()
+
+    def shutdown(self):
+        pass

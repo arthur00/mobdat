@@ -116,6 +116,22 @@ class MobdatController(cmd.Cmd) :
 
         frame_module.SimulatorStartup = True
 
+    def do_pause(self, args) :
+        """start
+        Start the simulation after all connectors are initialized
+        """
+        self.__Logger.warn("pausing all simulations")
+
+        frame_module.SimulatorPause = True
+
+    def do_unpause(self, args) :
+        """start
+        Start the simulation after all connectors are initialized
+        """
+        self.__Logger.warn("unpausing simulations")
+
+        frame_module.SimulatorPause = False
+
     # -----------------------------------------------------------------
     def do_exit(self, args) :
         """exit

@@ -43,3 +43,7 @@ class IFramed(object):
     @abc.abstractmethod
     def update(self):
         return
+
+    @abc.abstractmethod
+    def shutdown(self):
+        return

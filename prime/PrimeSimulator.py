@@ -77,3 +77,6 @@ class PrimeSimulator(IFramed):
 
         if self.mybusiness and len(self.schedule_deliveries) == 0:
             self.add_deliveries()
+
+    def shutdown(self):
+        pass

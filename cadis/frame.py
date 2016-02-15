@@ -31,11 +31,12 @@ LOG_HEADER = "[FRAME]"
 
 USE_REMOTE_STORE = True # TODO Convert C# server to accept Strings instead of Integer
 DEBUG = False
-INSTRUMENT = False
+INSTRUMENT = True
+INSTRUMENT_HEADERS = {}
 
 SimulatorStartup = False
 SimulatorShutdown = False
-
+SimulatorPaused = False
 
 
 class TimerThread(threading.Thread) :
@@ -90,7 +91,13 @@ class TimerThread(threading.Thread) :
             strtime = time.strftime("%Y-%m-%d_%H-%M-%S")
             self.ifname = os.path.join('stats', "%s_bench_%s.csv" % (strtime, self.frame.app.__class__.__name__))
             with open(self.ifname, 'w', 0) as csvfile:
-                self.fieldnames = ['delta','pull','update','push','mem buffer', 'mem store']
+                # Base headers
+                headers = ['delta', 'mem buffer', 'mem store']
+                # Annotated headers
+                headers.extend(INSTRUMENT_HEADERS[self.frame.__module__])
+                headers.extend(INSTRUMENT_HEADERS[self.frame.app.__module__])
+
+                self.fieldnames = headers
                 writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
                 writer.writeheader()
 
@@ -104,36 +111,36 @@ class TimerThread(threading.Thread) :
 
         try:
             while not SimulatorShutdown :
+                if SimulatorPaused:
+                    time.sleep(self.IntervalTime)
+                    continue
 
-                    stime = self.Clock()
-                    self.frame.execute_Frame()
+                stime = self.Clock()
+                self.frame.execute_Frame()
 
-                    etime = self.Clock()
-                    delta = etime - stime
+                etime = self.Clock()
+                delta = etime - stime
 
-                    if INSTRUMENT:
-                        with open(self.ifname, 'a', 0) as csvfile:
-                        #csv.writer(["%.3f" % delta].append(self.inst_array))
-                            writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
-                            d = self.frame._instruments
-                            d['delta'] = delta
+                if INSTRUMENT:
+                    with open(self.ifname, 'a', 0) as csvfile:
+                    #csv.writer(["%.3f" % delta].append(self.inst_array))
+                        writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
+                        d = self.frame._instruments
+                        d['delta'] = delta
+                        if self.CurrentIteration % 10 == 0:
+                            d['mem buffer'] = self.frame.buffersize()
+                        writer.writerow(d)
+                if delta < self.IntervalTime :
+                    time.sleep(self.IntervalTime - delta)
+                else:
+                    self.__Logger.warn("[%s]: Exceeded interval time by %s" , self.frame.app.__module__, delta)
 
-                            if self.CurrentIteration % 10 == 0:
-                                d['mem buffer'] = self.frame.buffersize()
-                            writer.writerow(d)
-                    if delta < self.IntervalTime :
-                        time.sleep(self.IntervalTime - delta)
-                    else:
-                        self.__Logger.warn("[%s]: Exceeded interval time by %s" , self.frame.app.__module__, delta)
-
-                    self.CurrentIteration += 1
+                self.CurrentIteration += 1
         finally:
             if DEBUG:
                 self.profile.disable()
                 self.profile.create_stats()
                 self.profile.dump_stats(os.path.join('stats', "%s_stats.ps" % self.frame.app.__class__.__name__))
-            if INSTRUMENT:
-                pass
 
         # compute a few stats
         elapsed = self.Clock() - starttime
@@ -148,6 +155,11 @@ def instrument(f):
     if not INSTRUMENT:
         return f
     else:
+        #if f.func_name not in INSTRUMENT_HEADERS:
+        #    INSTRUMENT_HEADERS.append(f.func_name)
+        if not f.__module__ in INSTRUMENT_HEADERS:
+            INSTRUMENT_HEADERS[f.__module__] = []
+        INSTRUMENT_HEADERS[f.__module__].append(f.func_name)
         @wraps(f)
         def instrument(*args, **kwds):
             obj = args[0]
@@ -217,6 +229,9 @@ class Frame(object):
         # Disables fetching of subsets
         self.subset_disable = set()
 
+        # Keeps track of object ids received for subset queries that are not in buffer yet
+        self.orphan_objids = {}
+
         self.timer = None
         self.step = 0
         self.thread = None
@@ -250,7 +265,7 @@ class Frame(object):
     def stop(self):
         if self.timer:
             self.timer.cancel()
-        sys.exit(0)
+        self.app.shutdown()
 
     def disable_subset(self, t):
         self.subset_disable.add(t)
@@ -293,6 +308,8 @@ class Frame(object):
         setitems = self.observed.intersection(schema_sets)
         permutations = self.observed.intersection(schema_permutationsets)
         subsets = self.observed.intersection(schema_subsets)
+        for t in subsets:
+            self.orphan_objids[t] = set()
 
         self.iterate_types.extend(setitems)
         self.iterate_types.extend(permutations)
@@ -325,7 +342,9 @@ class Frame(object):
             self.step += 1
             self.curtime = time.time()
         except:
-            logger.exception("uncaught exception: ")
+            global SimulatorPaused
+            SimulatorPaused = True
+            logger.exception("[%s] uncaught exception: ", self.app.__module__)
 
     def _fkobj(self, o):
         for propname in self.fkdict[o.__class__].keys():
@@ -352,13 +371,33 @@ class Frame(object):
             if hasattr(Frame.Store, "getupdated"):
                 (new, mod, deleted) = Frame.Store.getupdated(t, self)
                 if t in schema_subsets:
+                    # Parent type of subset 't'
                     pt = setsof[t]
+
+                    # Iterate for orphan keys from last pull
+                    notfound = set()
+                    for key in self.orphan_objids[t]:
+                        if key in self.storebuffer[pt]:
+                            o = copy(self.storebuffer[pt][key])
+                            o.__class__ = t
+                            self.storebuffer[t][key] = o
+                            self.new_storebuffer[t][key] = o
+                        else:
+                            notfound.add(key)
+                            self.__Logger.error("missing key %s for new object in subset list", key)
+                    self.orphan_objids[t] = set().union(notfound)
+
                     for key in new:
-                        # TODO: Make subsets be calculated after sets
-                        o = copy(self.storebuffer[pt][key])
-                        o.__class__ = t
-                        self.storebuffer[t][key] = o
-                        self.new_storebuffer[t][key] = o
+                        # If the key is not in the store's buffer, its likely the object was created between
+                        # the get for parent type and the current subset query. This is expected, just keep a reference
+                        # to check for again on next pull.
+                        if key in self.storebuffer[pt]:
+                            o = copy(self.storebuffer[pt][key])
+                            o.__class__ = t
+                            self.storebuffer[t][key] = o
+                            self.new_storebuffer[t][key] = o
+                        else:
+                            self.orphan_objids[t].add(key)
                     for key in mod:
                         o = copy(self.storebuffer[pt][key])
                         o.__class__ = t

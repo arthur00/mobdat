@@ -327,6 +327,7 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
         return None
 
     # -----------------------------------------------------------------
+    @instrument
     def HandleCreateObjectEvent(self):
         cars = self.frame.new(MovingVehicle)
         for car in cars:
@@ -363,13 +364,14 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
                 vtype.AssetID = assetid
 
             conn = sim["RemoteControl"]
-            result = conn.CreateObject(vtype.AssetID, objectid=vuuid, name=vname, parm=vtype.StartParameter)
+            result = conn.CreateObject(vtype.AssetID, objectid=vuuid, name=vname, parm=vtype.StartParameter, async=True)
             self.__Logger.debug("Created new object with ID %s", vname)
 
             # self.__Logger.debug("create new vehicle %s with id %s", vname, vuuid)
         return True
 
     # -----------------------------------------------------------------
+    @instrument
     def HandleDeleteObjectEvent(self) :
         """Handle the delete object event. In this case, rather than delete the
         object from the scene completely, mothball it in a location well away from
@@ -404,6 +406,7 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
         return True
 
     # -----------------------------------------------------------------
+    @instrument
     def HandleObjectDynamicsEvent(self) :
         changed = self.frame.changed(MovingVehicle)
         if len(changed) == 0:
@@ -495,25 +498,6 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
             #self.PublishEvent(event)
             pass
 
-    # -----------------------------------------------------------------
-    def HandleShutdownEvent(self, event) :
-        for name,sim in self.Scenes.items():
-            conn = sim["RemoteControl"]
-            # clean up all the outstanding vehicles
-            for vehicle in sim["Vehicles"].itervalues() :
-                conn.DeleteObject(vehicle.VehicleID)
-
-            # print 'waiting for update thread to terminate'
-            for count in range(self.UpdateThreadCount) :
-                self.WorkQ.put(None)
-
-            for count in range(self.UpdateThreadCount) :
-                self.UpdateThreads[count].join()
-
-            #self.__Logger.info('create/delete messages sent to opensim: %d', self.OpenSimConnector.MessagesSent)
-            self.__Logger.info('%d vehicles interpolated correctly', self.Interpolated)
-            self.__Logger.info('shut down')
-
 
     # -----------------------------------------------------------------
     def initialize(self) :
@@ -541,3 +525,20 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
         # all set... time to get to work!
         #self.HandleEvents()
 
+    def shutdown(self):
+        for name,sim in self.Scenes.items():
+            conn = sim["RemoteControl"]
+            # clean up all the outstanding vehicles
+            for vehicle in sim["Vehicles"].itervalues() :
+                conn.DeleteObject(vehicle.VehicleID)
+
+            # print 'waiting for update thread to terminate'
+            for count in range(self.UpdateThreadCount) :
+                self.WorkQ.put(None)
+
+            for count in range(self.UpdateThreadCount) :
+                self.UpdateThreads[count].join()
+
+            #self.__Logger.info('create/delete messages sent to opensim: %d', self.OpenSimConnector.MessagesSent)
+            self.__Logger.info('%d vehicles interpolated correctly', self.Interpolated)
+            self.__Logger.info('shut down')
