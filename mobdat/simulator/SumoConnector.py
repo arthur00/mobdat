@@ -193,6 +193,7 @@ class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
         for v in alist :
             #event = EventTypes.EventDeleteObject(v)
             #self.PublishEvent(event)
+            self.__Logger.info("Vehicle %s arrived at %s", self.cars[v].Name, self.cars[v].Position)
             self.frame.delete(self.cars[v].__class__, self.cars[v].ID)
             del self.cars[v]
 

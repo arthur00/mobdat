@@ -5,6 +5,7 @@
 *.project
 *.pydevproject
 worldinfo_backup
+stats
 jsondata
 build
 layinfo.js

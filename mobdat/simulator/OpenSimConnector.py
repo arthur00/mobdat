@@ -339,7 +339,7 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
             vname = car.Name
             self.Vehicles2Sim[vname] = sim
 
-            self.__Logger.debug("create vehicle %s with type %s", vname, vtypename)
+            self.__Logger.info("create vehicle %s with type %s", vname, vtypename)
 
             if len(sim["VehicleReuseList"][vtypename]) > 0 :
                 vehicle = sim["VehicleReuseList"][vtypename].popleft()
@@ -348,6 +348,7 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
                 # remove the old one from the vehicle map
                 del sim["Vehicles"][vehicle.VehicleName]
                 del self.Vehicles2Sim[vehicle.VehicleName]
+                self.__Logger.info("deleting vehicle %s to make way for %s", vehicle.VehicleName, vname)
 
                 # update it and add it back to the map with the new name
                 vehicle.VehicleName = vname
@@ -381,6 +382,7 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
         deleted = self.frame.deleted(MovingVehicle)
         for car in deleted:
             vname = car.Name
+            self.__Logger.info("deleting car %s from OpenSim", vname)
             if vname not in self.Vehicles2Sim :
                 self.__Logger.warn("attempt to delete unknown vehicle %s" % (vname))
                 continue
@@ -409,12 +411,11 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
     @instrument
     def HandleObjectDynamicsEvent(self) :
         changed = self.frame.changed(MovingVehicle)
-        if len(changed) == 0:
-            self.__Logger.debug("No new updates this tick.")
         for car in changed:
             vname = car.Name
             if vname not in self.Vehicles2Sim :
                 self.__Logger.warn("attempt to update unknown vehicle %s" % (vname))
+                cars = self.frame.get(MovingVehicle)
                 continue
 
             sim = self.Vehicles2Sim[vname]

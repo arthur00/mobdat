@@ -10,7 +10,8 @@ from cadis.store.simplestore import SimpleStore
 import logging, sys
 from cadis.store.remotestore import RemoteStore
 from cadis.language.schema import schema_data, CADISEncoder, subsetsof,\
-    setsof, sets as schema_sets, subsets as schema_subsets, permutationsets as schema_permutationsets
+    setsof, sets as schema_sets, subsets as schema_subsets, permutationsets as schema_permutationsets,\
+    CADIS
 import threading
 import time
 import platform
@@ -92,7 +93,7 @@ class TimerThread(threading.Thread) :
             self.ifname = os.path.join('stats', "%s_bench_%s.csv" % (strtime, self.frame.app.__class__.__name__))
             with open(self.ifname, 'w', 0) as csvfile:
                 # Base headers
-                headers = ['delta', 'mem buffer', 'mem store']
+                headers = ['delta', 'nobjects', 'mem buffer']
                 # Annotated headers
                 headers.extend(INSTRUMENT_HEADERS[self.frame.__module__])
                 headers.extend(INSTRUMENT_HEADERS[self.frame.app.__module__])
@@ -126,9 +127,9 @@ class TimerThread(threading.Thread) :
                     #csv.writer(["%.3f" % delta].append(self.inst_array))
                         writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
                         d = self.frame._instruments
-                        d['delta'] = delta
+                        d['delta'] = delta * 1000
                         if self.CurrentIteration % 10 == 0:
-                            d['mem buffer'] = self.frame.buffersize()
+                            d['nobjects'], d['mem buffer'] = self.frame.buffersize()
                         writer.writerow(d)
                 if delta < self.IntervalTime :
                     time.sleep(self.IntervalTime - delta)
@@ -170,7 +171,7 @@ def instrument(f):
             end = time.time()
             if not hasattr(obj, '_instruments'):
                 obj._instruments = {}
-            obj._instruments[f.__name__] = end-start
+            obj._instruments[f.__name__] = (end-start) * 1000
             return ret
         return instrument
 
@@ -257,10 +258,13 @@ class Frame(object):
 
     def buffersize(self):
         size = 0
+        nobjects = 0
         for t in self.storebuffer:
             for o in self.storebuffer[t].values():
-                size += sys.getsizeof(o)
-        return size
+                nobjects += 1
+                for prop in o._dimensions:
+                    size += sys.getsizeof(prop)
+        return (nobjects, size)
 
     def stop(self):
         if self.timer:
@@ -404,8 +408,17 @@ class Frame(object):
                         self.storebuffer[t][key] = o
                         self.mod_storebuffer[t][key] = o
                     for key in deleted:
+                        if key in self.storebuffer[pt]:
+                            o = copy(self.storebuffer[pt][key])
+                        elif key in self.del_storebuffer[pt]:
+                            o = copy(self.del_storebuffer[pt][key])
+                        else:
+                            self.__Logger.warn("object %s was deleted, could find find a reference to give to application.", key)
+                            o = CADIS()
+                            o.ID = key
+                        o.__class__ = t
+                        del self.storebuffer[t][key]
                         self.del_storebuffer[t][key] = o
-
                 else:
                     for o in new:
                         self.storebuffer[t][o._primarykey] = o
@@ -510,6 +523,8 @@ class Frame(object):
             o = self.storebuffer[t][oid]
             self.deletelist[t][o._primarykey] = o
             del self.storebuffer[t][oid]
+        else:
+            logger.warn("could not find object %s in storebuffer")
         return True
 
     def findproperty(self, t, propname, value):
@@ -547,7 +562,7 @@ class Frame(object):
                 self.__Logger.error("Could not find type %s in cache. Did you remember to add it as a gettter, setter, or producer in the simulator?")
                 sys.exit(0)
             if primkey != None:
-                obj = copy(self.storebuffer[t][primkey])
+                obj = self.storebuffer[t][primkey]
                 if hasattr(t, '_foreignkeys'):
                     self._resolve_fk(obj, t)
                 return obj
@@ -564,13 +579,13 @@ class Frame(object):
 
 
     def new(self, t):
-        return copy(self.new_storebuffer[t].values())
+        return self.new_storebuffer[t].values()
 
     def deleted(self, t):
-        return copy(self.del_storebuffer[t].values())
+        return self.del_storebuffer[t].values()
 
     def changed(self, t):
-        return copy(self.mod_storebuffer[t].values())
+        return self.mod_storebuffer[t].values()
 
     def __deepcopy__(self, memo):
         return self

@@ -148,6 +148,9 @@ def SetupLoggers() :
     clog.setLevel(logging.DEBUG)
     logger.addHandler(clog)
 
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
 def Main() :

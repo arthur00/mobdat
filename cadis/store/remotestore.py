@@ -4,7 +4,7 @@ Created on Dec 14, 2015
 @author: Arthur Valadares
 '''
 
-from cadis.common.IStore import IStore;
+from cadis.common.IStore import IStore
 from cadis.language import schema
 from copy import deepcopy
 import json, sys

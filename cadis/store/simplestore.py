@@ -23,23 +23,23 @@ class SubSetFrameUpdate(object):
         self.objectids = set()
         self.object_dicts = {}
 
-    def get_update(self, objids):
+    def get_update(self, newobjids):
         tmp_object_dicts = {}
         # Calculate set of new objects since last query
         new = []
-        for primkey in objids.difference(self.objectids):
+        for primkey in newobjids.difference(self.objectids):
             newobj = self.store[self.objtype][primkey]
             new.append(primkey)
             tmp_object_dicts[primkey] = str(newobj.__dict__)
 
         # Calculate set of deleted objects
         deleted = []
-        for primkey in self.objectids.difference(objids):
+        for primkey in self.objectids.difference(newobjids):
             deleted.append(primkey)
 
         # Calculate set of modified objects
         mod = []
-        for primkey in objids.intersection(self.objectids):
+        for primkey in newobjids.intersection(self.objectids):
             newobj = self.store[self.objtype][primkey]
             strdictnew = str(newobj.__dict__)
             if strdictnew != self.object_dicts[primkey]:
