@@ -40,6 +40,8 @@ and operations into and out of the sumo traffic simulator.
 import os, sys
 import logging
 import subprocess
+import platform
+from mobdat.simulator.BaseConnector import instrument
 
 sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
@@ -158,6 +160,7 @@ class SumoConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
                 self.PublishEvent(event)
 
     # -----------------------------------------------------------------
+    @instrument
     def HandleDepartedVehicles(self, currentStep) :
         dlist = traci.simulation.getDepartedIDList()
         for v in dlist :
@@ -169,6 +172,7 @@ class SumoConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
             self.PublishEvent(event)
 
     # -----------------------------------------------------------------
+    @instrument
     def HandleArrivedVehicles(self, currentStep) :
         alist = traci.simulation.getArrivedIDList()
         for v in alist :
@@ -190,13 +194,15 @@ class SumoConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
     #     traci.vehicle.rerouteTraveltime(str(event.ObjectIdentity))
 
     # -----------------------------------------------------------------
+    @instrument
     def HandleAddVehicleEvent(self, event) :
-        self.__Logger.debug('add vehicle %s going from %s to %s', event.ObjectIdentity, event.Route, event.Target)
+        self.__Logger.warn('add vehicle %s going from %s to %s', event.ObjectIdentity, event.Route, event.Target)
         traci.vehicle.add(event.ObjectIdentity, event.Route, typeID=event.ObjectType)
         traci.vehicle.changeTarget(event.ObjectIdentity, event.Target)
 
     # -----------------------------------------------------------------
     # Returns True if the simulation can continue
+    @instrument
     def HandleTimerEvent(self, event) :
         self.CurrentStep = event.CurrentStep
         self.CurrentTime = event.CurrentTime
@@ -263,7 +269,10 @@ class SumoConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
 
     # -----------------------------------------------------------------
     def SimulationStart(self) :
-        sumoBinary = checkBinary('sumo')
+        if platform.system() == 'Windows' or platform.system().startswith("CYGWIN"):
+            sumoBinary = checkBinary('sumo.exe')
+        else:
+            sumoBinary = checkBinary('sumo')
         sumoCommandLine = [sumoBinary, "-c", self.ConfigFile, "-l", "sumo.log"]
 
         self.SumoProcess = subprocess.Popen(sumoCommandLine, stdout=sys.stdout, stderr=sys.stderr)

@@ -5,9 +5,9 @@
         "Interval" : 0.200,
         "SecondsPerStep" : 2.0,
         "StartTimeOfDay" : 7.0,
-        "MaximumTravelers" : 6000, 
-	"WorldInfoFile" : "worldinfo.js",
-        "Connectors" : ["opensim", "sumo", "social", "stats"]
+        "MaximumTravelers" : 1000,
+		"WorldInfoFile" : "worldinfo.js",
+        "Connectors" : ["opensim", "sumo", "social"]
     },
 
     "Builder" :
@@ -24,7 +24,7 @@
 
     "OpenSimConnector" :
     {
-        "WorldSize" : [1910.0, 1910.0, 100.0],
+        "WorldSize" : [810.0, 810.0, 100.0],
         "RegionSize" : [1024.0, 1024.0],
         "BuildOffset" : [415.0, 415.0],
         "WorldOffset" : [10.0, 10.0, 25.5],
@@ -32,7 +32,7 @@
         "PositionDelta" : 0.1,
         "VelocityDelta" : 0.1,
         "AccelerationDelta" : 0.05,
-        "UpdateThreadCount" : 6,
+        "UpdateThreadCount" : 1,
         "Binary" : true,
 	"Scenes" :
 	{

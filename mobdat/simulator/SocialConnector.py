@@ -40,6 +40,7 @@ the social (people) aspects of the mobdat simulation.
 
 import os, sys
 import logging
+from mobdat.simulator.BaseConnector import instrument
 
 sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
@@ -87,6 +88,7 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
             count += 1
             if self.MaximumTravelers > 0 and self.MaximumTravelers < count :
                 break
+        del self.World
 
             
     # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -127,6 +129,7 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         self.PublishEvent(event)
 
     # -----------------------------------------------------------------
+    @instrument
     def GenerateAddVehicleEvent(self, trip) :
         """
         GenerateAddVehicleEvent -- generate an AddVehicle event to start
@@ -154,6 +157,7 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
     # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
     # -----------------------------------------------------------------
+    @instrument
     def HandleDeleteObjectEvent(self, event) :
         """
         HandleDeleteObjectEvent -- delete object means that a car has completed its
@@ -168,6 +172,7 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         trip.TripCompleted(self)
 
     # -----------------------------------------------------------------
+    @instrument
     def HandleTimerEvent(self, event) :
         """
         HandleTimerEvent -- timer event happened, process pending events from
@@ -181,7 +186,7 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
             wtime = self.WorldTime
             qlen = len(self.TripTimerEventQ)
             stime = self.TripTimerEventQ[0].ScheduledStartTime if self.TripTimerEventQ else 0.0
-            self.__Logger.info('at time %0.3f, timer queue contains %s elements, next event scheduled for %0.3f', wtime, qlen, stime)
+            self.__Logger.warn('at time %0.3f, timer queue contains %s elements, next event scheduled for %0.3f', wtime, qlen, stime)
 
         while self.TripTimerEventQ :
             if self.TripTimerEventQ[0].ScheduledStartTime > self.WorldTime :

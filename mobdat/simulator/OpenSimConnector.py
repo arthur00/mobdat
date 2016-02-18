@@ -43,6 +43,8 @@ from mobdat.common.Utilities import AuthByUserName, GenCoordinateMap,\
     CalculateOSCoordinates, CalculateOSCoordinatesFromScene,\
     GetSceneFromCoordinates
 import OpenSimRemoteControl
+from mobdat.simulator.BaseConnector import instrument
+from mobdat.simulator.Controller import INSTRUMENT_HEADERS
 
 # we need to import python modules from the $SUMO_HOME/tools directory
 sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
@@ -237,7 +239,7 @@ class OpenSimConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         evhandler -- the initialized event handler, EventRegistry type
         settings -- dictionary of settings from the configuration file
         """
-
+        INSTRUMENT_HEADERS[self.__module__].append("CreateObject")
         self.Debug = True
         if self.Debug == True:
             self.debug_ct = 0
@@ -294,6 +296,7 @@ class OpenSimConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
             self.Clock = time.clock
 
     # -----------------------------------------------------------------
+    @instrument
     def _FindAssetInObject(self, assetinfo) :
         oname = assetinfo["ObjectName"]
         iname = assetinfo["ItemName"]
@@ -318,6 +321,7 @@ class OpenSimConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         return None
 
     # -----------------------------------------------------------------
+    @instrument
     def HandleCreateObjectEvent(self,event) :
         OpenSimPosition = event.ObjectPosition.ScaleVector(self.WorldSize).AddVector(self.WorldOffset)
         sim = GetSceneFromCoordinates(OpenSimPosition.x,OpenSimPosition.y,self)
@@ -352,12 +356,18 @@ class OpenSimConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
             vtype.AssetID = assetid
 
         conn = sim["RemoteControl"]
-        result = conn.CreateObject(vtype.AssetID, objectid=vuuid, name=vname, parm=vtype.StartParameter)
+        stime = time.time()
+        result = conn.CreateObject(vtype.AssetID, objectid=vuuid, name=vname, parm=vtype.StartParameter, async=True)
+        etime = time.time()
+        if not hasattr(self, "_instruments"):
+            self._instruments = {}
+        self._instruments["CreateObject"] = (etime-stime)*1000
  
         # self.__Logger.debug("create new vehicle %s with id %s", vname, vuuid)
         return True
 
     # -----------------------------------------------------------------
+    @instrument
     def HandleDeleteObjectEvent(self,event) :
         """Handle the delete object event. In this case, rather than delete the
         object from the scene completely, mothball it in a location well away from
@@ -390,6 +400,7 @@ class OpenSimConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         return True
 
     # -----------------------------------------------------------------
+    @instrument
     def HandleObjectDynamicsEvent(self,event) :
         vname = event.ObjectIdentity
         if vname not in self.Vehicles2Sim :
@@ -462,6 +473,8 @@ class OpenSimConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         # Compute the clock skew
         self.AverageClockSkew = (9.0 * self.AverageClockSkew + (self.Clock() - self.CurrentTime)) / 10.0
 
+        if (self.CurrentStep % int(5.0 / 0.2)) == 0:
+                self.__Logger.warn('[%s] number of vehicles in simulation: %s', self.CurrentStep, len(self.Vehicles2Sim))
         # Send the event if we need to
         if (self.CurrentStep % self.DumpCount) == 0 :
             event = EventTypes.OpenSimConnectorStatsEvent(self.CurrentStep, self.AverageClockSkew)

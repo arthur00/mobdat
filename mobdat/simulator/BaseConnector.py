@@ -40,6 +40,10 @@ world time and other functions common to all connectors.
 
 import os, sys
 import logging
+import csv
+from functools import wraps
+from mobdat.simulator import EventTypes
+from mobdat.simulator.Controller import INSTRUMENT, INSTRUMENT_HEADERS
 
 sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
@@ -47,6 +51,27 @@ sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "lib")))
 
 import platform, time
+
+def instrument(f):
+    if not INSTRUMENT:
+        return f
+    else:
+        #if f.func_name not in INSTRUMENT_HEADERS:
+        #    INSTRUMENT_HEADERS.append(f.func_name)
+        if not f.__module__ in INSTRUMENT_HEADERS:
+            INSTRUMENT_HEADERS[f.__module__] = []
+        INSTRUMENT_HEADERS[f.__module__].append(f.func_name)
+        @wraps(f)
+        def instrument(*args, **kwds):
+            obj = args[0]
+            start = time.time()
+            ret = f(*args, **kwds)
+            end = time.time()
+            if not hasattr(obj, '_instruments'):
+                obj._instruments = {}
+            obj._instruments[f.__name__] = (end-start) * 1000
+            return ret
+        return instrument
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -71,6 +96,23 @@ class BaseConnector :
         ## versions of time.clock seem seriously broken
         if platform.system() == 'Windows' :
             self.Clock = time.clock
+
+        if INSTRUMENT:
+            if not os.path.exists('stats'):
+                os.mkdir('stats')
+            strtime = time.strftime("%Y-%m-%d_%H-%M-%S")
+            self.ifname = os.path.join('stats', "%s_bench_%s.csv" % (strtime, self.__class__.__name__))
+            with open(self.ifname, 'w', 0) as csvfile:
+                # Base headers
+                headers = ['step']
+                # Annotated headers
+                if self.__module__ in INSTRUMENT_HEADERS:
+                    headers.extend(INSTRUMENT_HEADERS[self.__module__])
+
+                self.fieldnames = headers
+                writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
+                writer.writeheader()
+            self.SubscribeEvent(EventTypes.InstrumentEvent, self.HandleInstrumentation)
 
         # Save network information
         self.NetSettings = netsettings
@@ -103,3 +145,15 @@ class BaseConnector :
     # -----------------------------------------------------------------
     @property
     def WorldDay(self) : return self.GetWorldDay(self.CurrentStep)
+
+    def HandleInstrumentation(self, event):
+        if hasattr(self, "_instruments"):
+            with open(self.ifname, 'a', 0) as csvfile:
+            #csv.writer(["%.3f" % delta].append(self.inst_array))
+                writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
+                d = self._instruments
+                d['step'] = event.Step
+                #if self.CurrentIteration % 10 == 0:
+                #    d['nobjects'], d['mem buffer'] = self.frame.buffersize()
+                writer.writerow(d)
+                self._instruments = {}

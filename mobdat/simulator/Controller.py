@@ -7,15 +7,15 @@ modification, are permitted provided that the following conditions are
 met:
 
 * Redistributions of source code must retain the above copyright notice,
-  this list of conditions and the following disclaimer. 
+  this list of conditions and the following disclaimer.
 
 * Redistributions in binary form must reproduce the above copyright
   notice, this list of conditions and the following disclaimer in the
-  documentation and/or other materials provided with the distribution. 
+  documentation and/or other materials provided with the distribution.
 
 * Neither the name of Intel Corporation nor the names of its
   contributors may be used to endorse or promote products derived from
-  this software without specific prior written permission. 
+  this software without specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
 IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -27,7 +27,7 @@ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
 PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
 LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 @file    Controller.py
 @author  Mic Bowman
@@ -41,10 +41,21 @@ clock ticks.
 
 import os, sys
 import logging
+import csv
 
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "lib")))
+
+# -----------------------------------------------------------------
+# -----------------------------------------------------------------
+SimulatorStartup = False
+SimulatorShutdown = False
+CurrentIteration = 0
+FinalIteration = 0
+
+INSTRUMENT = True
+INSTRUMENT_HEADERS = {}
 
 import platform, time, threading, cmd
 import EventRouter, EventTypes
@@ -65,12 +76,7 @@ _SimulationControllers = {
 
 logger = logging.getLogger(__name__)
 
-# -----------------------------------------------------------------
-# -----------------------------------------------------------------
-SimulatorStartup = False
-SimulatorShutdown = False
-CurrentIteration = 0
-FinalIteration = 0
+
 
 class TimerThread(threading.Thread) :
     # -----------------------------------------------------------------
@@ -89,7 +95,7 @@ class TimerThread(threading.Thread) :
         self.__Logger = logging.getLogger(__name__)
         self.EventRouter = evrouter
         self.IntervalTime = float(settings["General"]["Interval"])
-        
+
         global FinalIteration
         FinalIteration = settings["General"].get("TimeSteps",0)
 
@@ -97,8 +103,8 @@ class TimerThread(threading.Thread) :
 
         ## this is an ugly hack because the cygwin and linux
         ## versions of time.clock seem seriously broken
-        if platform.system() == 'Windows' :
-            self.Clock = time.clock
+        #if platform.system() == 'Windows' :
+        #    self.Clock = time.clock
 
     # -----------------------------------------------------------------
     def run(self) :
@@ -107,9 +113,9 @@ class TimerThread(threading.Thread) :
 
         # Wait for the signal to start the simulation, this allows all of the
         # connectors to initialize
-        while not SimulatorStartup :
+        while not (SimulatorStartup or SimulatorShutdown):
             time.sleep(5.0)
-            
+
         # Start the main simulation loop
         self.__Logger.debug("start main simulation loop")
         starttime = self.Clock()
@@ -130,11 +136,15 @@ class TimerThread(threading.Thread) :
                 time.sleep(self.IntervalTime - (etime - stime))
 
             CurrentIteration += 1
+            if INSTRUMENT:
+                ievent = EventTypes.InstrumentEvent(CurrentIteration)
+                self.EventRouter.RouterQueue.put(ievent)
 
         # compute a few stats
         elapsed = self.Clock() - starttime
-        avginterval = 1000.0 * elapsed / CurrentIteration
-        self.__Logger.warn("%d iterations completed with an elapsed time %f or %f ms per iteration", CurrentIteration, elapsed, avginterval)
+        if CurrentIteration > 0:
+            avginterval = 1000.0 * elapsed / CurrentIteration
+            self.__Logger.warn("%d iterations completed with an elapsed time %f or %f ms per iteration", CurrentIteration, elapsed, avginterval)
 
         # send the shutdown events
         event = EventTypes.ShutdownEvent(False)
@@ -171,7 +181,7 @@ class MobdatController(cmd.Cmd) :
             FinalIteration = int(pargs[0])
         except :
             print 'Unable to parse input parameter %s' % args
-        
+
     # -----------------------------------------------------------------
     def do_start(self, args) :
         """start
@@ -234,7 +244,7 @@ def Controller(settings) :
         connproc = Process(target=connector.SimulationStart, args=())
         connproc.start()
         connectors.append(connproc)
-            
+
     evrouterproc = Process(target=evrouter.RouteEvents, args=())
     evrouterproc.start()
 
@@ -244,6 +254,8 @@ def Controller(settings) :
 
     controller = MobdatController(evrouter, logger)
     controller.cmdloop()
+
+    del world
 
     thread.join()
 

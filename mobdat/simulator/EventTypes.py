@@ -76,6 +76,11 @@ class StatsEvent :
         self.StatKey = self.__class__.__name__ if not skey else skey
         self.CurrentStep = timestep
 
+class InstrumentEvent:
+    # -----------------------------------------------------------------
+    def __init__(self, step):
+        self.Step = step
+
 ## XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ## XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 class TripStatsEvent(StatsEvent) :
