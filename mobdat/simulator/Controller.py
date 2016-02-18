@@ -122,7 +122,7 @@ class MobdatController(cmd.Cmd) :
         """
         self.__Logger.warn("pausing all simulations")
 
-        frame_module.SimulatorPause = True
+        frame_module.SimulatorPaused = True
 
     def do_unpause(self, args) :
         """start
@@ -130,7 +130,7 @@ class MobdatController(cmd.Cmd) :
         """
         self.__Logger.warn("unpausing simulations")
 
-        frame_module.SimulatorPause = False
+        frame_module.SimulatorPaused = False
 
     # -----------------------------------------------------------------
     def do_exit(self, args) :
