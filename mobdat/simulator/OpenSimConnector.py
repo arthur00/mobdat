@@ -303,6 +303,7 @@ class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
             self.Clock = time.clock
 
     # -----------------------------------------------------------------
+    @instrument
     def _FindAssetInObject(self, assetinfo) :
         oname = assetinfo["ObjectName"]
         iname = assetinfo["ItemName"]

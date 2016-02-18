@@ -103,7 +103,7 @@ class EventHandler :
             except TypeError as detail :
                 self._Logger.warn('handler for event %s failed with type error; %s', evtype.__name__, str(detail))
             except :
-                self._Logger.warn('handler for event %s failed with exception\n%s', evtype.__name__, traceback.format_exc(10))
+                self._Logger.exception('handler for event %s failed with exception\n%s', evtype.__name__, traceback.format_exc(10))
                 self.Shutdown()
                 return
 

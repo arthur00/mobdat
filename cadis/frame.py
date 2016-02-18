@@ -91,6 +91,10 @@ class TimerThread(threading.Thread) :
                 os.mkdir('stats')
             strtime = time.strftime("%Y-%m-%d_%H-%M-%S")
             self.ifname = os.path.join('stats', "%s_bench_%s.csv" % (strtime, self.frame.app.__class__.__name__))
+            linkname = os.path.join('stats', "latest_%s" % self.frame.app.__class__.__name__)
+            if os.path.exists(linkname):
+                os.remove(linkname)
+            os.symlink(os.path.abspath(self.ifname), linkname)
             with open(self.ifname, 'w', 0) as csvfile:
                 # Base headers
                 headers = ['delta', 'nobjects', 'mem buffer']
@@ -131,6 +135,7 @@ class TimerThread(threading.Thread) :
                         if self.CurrentIteration % 10 == 0:
                             d['nobjects'], d['mem buffer'] = self.frame.buffersize()
                         writer.writerow(d)
+                        self.frame._instruments = {}
                 if delta < self.IntervalTime :
                     time.sleep(self.IntervalTime - delta)
                 else:
