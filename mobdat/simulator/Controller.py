@@ -115,8 +115,15 @@ class MobdatController(cmd.Cmd) :
         Start the simulation after all connectors are initialized
         """
         self.__Logger.warn("starting the timer loop")
-
-        # frame_module.SimulatorStartup = True
+        ready = False
+        while(not ready):
+            ready = True
+            for k,v in self.cmds["Apps"].items():
+                if v != "Ready":
+                    print "Application %s not ready yet." % k
+                    ready = False
+            if not ready:
+                time.sleep(1)
         self.cmds["SimulatorStartup"] = True
 
     def do_pause(self, args) :
@@ -125,7 +132,6 @@ class MobdatController(cmd.Cmd) :
         """
         self.__Logger.warn("pausing all simulations")
 
-        # frame_module.SimulatorPaused = True
         self.cmds["SimulatorPaused"] = True
 
     def do_unpause(self, args) :
@@ -134,7 +140,6 @@ class MobdatController(cmd.Cmd) :
         """
         self.__Logger.warn("unpausing simulations")
 
-        # frame_module.SimulatorPaused = False
         self.cmds["SimulatorPaused"] = False
 
     # -----------------------------------------------------------------
@@ -145,9 +150,6 @@ class MobdatController(cmd.Cmd) :
 
         self.__Logger.warn("stopping the timer loop")
 
-        #frame_module.SimulatorStartup = True
-        # kill the timer if it hasn't already shutdown
-        #frame_module.SimulatorShutdown = True
         self.cmds["SimulatorStartup"] = True
         self.cmds["SimulatorShutdown"] = True
 
@@ -177,49 +179,47 @@ def Controller(settings) :
     # world = None
 
     cnames = settings["General"].get("Connectors", ['sumo', 'opensim', 'social', 'stats'])
+    store_type = settings["General"].get("Store", "SimpleStore")
+    process = settings["General"].get("MultiProcessing", False)
 
     connectors = []
-    # store = RemoteStore()
-    manager = Manager()
 
-    cmd_dict = manager.dict()
+    if store_type == "RemoteStore":
+        manager = Manager()
+        cmd_dict = manager.dict()
+        cmd_dict["Apps"] = manager.dict()
+    else:
+        cmd_dict = {}
+        cmd_dict["Apps"] = {}
     cmd_dict["SimulatorStartup"] = False
     cmd_dict["SimulatorShutdown"] = False
     cmd_dict["SimulatorPaused"] = False
 
-    # store= RemoteStore()
+    if store_type == "RemoteStore":
+        Store = PythonRemoteStore
+    elif store_type == "SimpleStore":
+        Store = SimpleStore
+    else: #default to SimpleStore
+        Store = SimpleStore
+
+    if process and Store == SimpleStore:
+        logger.warn("Cannot use multiprocessing with SimpleStore. Continuing with Threading.")
+        process = False
+
     for cname in cnames :
         if cname not in _SimulationControllers :
             logger.warn('skipping unknown simulation connector; %s' % (cname))
             continue
 
-        cframe = Frame(PythonRemoteStore())
+        cframe = Frame(Store(), process)
         connector = _SimulationControllers[cname](settings, world, laysettings, cname, cframe)
         cframe.attach(connector)
-        # connproc = Process(target=connector.SimulationStart, args=())
-        # connproc.start()
         connectors.append(cframe)
         cframe.go(cmd_dict)
-
-    # evrouterproc = Process(target=evrouter.RouteEvents, args=())
-    # evrouterproc.start()
-
-    # start the timer thread
-    # thread = TimerThread(evrouter, settings)
-    # thread.start()
 
     controller = MobdatController(logger, connectors, cmd_dict)
     controller.cmdloop()
 
-    # thread.join()
-
-    # send the shutdown event to the connectors
     for connproc in connectors :
         connproc.join()
     print "closing down controller"
-    sys.exit(0)
-    # and send the shutdown event to the router
-    # event = EventTypes.ShutdownEvent(True)
-    # evrouter.RouterQueue.put(event)
-
-    # evrouterproc.join()

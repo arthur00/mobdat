@@ -5,10 +5,12 @@
         "Interval" : 0.200,
         "SecondsPerStep" : 2.0,
         "StartTimeOfDay" : 7.0,
-        "MaximumTravelers" : 1600,
+        "MaximumTravelers" : 500,
 		"WorldInfoFile" : "worldinfo.js",
 		"Data" : "jsondata",
-        "Connectors" : ["social", "prime", "sumo", "opensim"]
+		"Store" : "SimpleStore",
+		"MultiProcessing" : false,
+        "Connectors" : ["social", "sumo", "opensim"]
     },
 
     "Builder" :

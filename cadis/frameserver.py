@@ -153,7 +153,7 @@ class FrameServer(object):
     '''
     Store server for CADIS
     '''
-    Store = SimpleStore(server=True)
+    Store = SimpleStore()
     name2class = Store.name2class
     def __init__(self):
         # ## Test Code

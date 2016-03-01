@@ -126,22 +126,31 @@ class SimpleStore(IStore):
     lock = threading.RLock()
     __Logger = logging.getLogger(__name__)
 
-    def __init__(self, server=False):
-        '''
-        Constructor
-        '''
-        self.updates4sim = {}
+    def __new__(cls, *args, **kwargs):
+        if hasattr(cls, "__singleton__"):
+            return cls.__singleton__
+        else:
+            obj = object.__new__(cls, *args, **kwargs)
+            setattr(cls, "__singleton__", obj)
+            obj._initialized = False
+            return obj
 
-        for t in schema.sets.union(schema.permutationsets):
-            if t not in self.store:
-                self.store[t] = {}
-                SimpleStore.name2class[t._FULLNAME] = t
-        for t in schema.subsets:
-            if t not in self.subsets:
-                self.subsets[t] = {}
-                SimpleStore.name2class[t._FULLNAME] = t
-        # for t in schema.permutedclss:
-        #    self.store[t] = {}
+    def __init__(self):
+        '''
+        Constructor. May execute multiple times, due to Singleton pattern
+        '''
+        if not self._initialized:
+            self.updates4sim = {}
+
+            for t in schema.sets.union(schema.permutationsets):
+                if t not in self.store:
+                    self.store[t] = {}
+                    SimpleStore.name2class[t._FULLNAME] = t
+            for t in schema.subsets:
+                if t not in self.subsets:
+                    self.subsets[t] = {}
+                    SimpleStore.name2class[t._FULLNAME] = t
+            self._initialized = True
 
     def register(self, sim):
         self.updates4sim[sim] = {}

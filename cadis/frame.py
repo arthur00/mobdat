@@ -4,7 +4,6 @@ Created on Dec 14, 2015
 @author: Arthur Valadares
 '''
 
-import StringIO
 import cProfile
 from copy import deepcopy, copy
 import csv
@@ -13,10 +12,7 @@ import logging, sys
 from multiprocessing import Process
 import os
 import platform
-import pstats
-import random
-import signal
-from threading import Timer
+from threading import Timer, Thread
 import time
 import uuid
 
@@ -42,7 +38,7 @@ INSTRUMENT_HEADERS = {}
 # SimulatorPaused = False
 
 
-class TimerThread(Process) :
+class TimerThread(object) :
     # -----------------------------------------------------------------
     def __init__(self, frame, store, cmds) :
         """
@@ -50,17 +46,17 @@ class TimerThread(Process) :
         ticks that each of the connectors can process.
 
         Arguments:
-        evrouter -- the initialized event handler object
-        interval -- time between successive clock ticks
+        frame --
+        store --
         """
 
-        # threading.Thread.__init__(self)
-        super(TimerThread, self).__init__()
+        #super(TimerThread, self).__init__()
 
         self.__Logger = logging.getLogger(__name__)
         self.frame = frame
         Frame.Store = store
         self.cmds = cmds
+        self.appname = self.frame.app._appname
         self.CurrentIteration = 0
         # self.IntervalTime = float(settings["General"]["Interval"])
         if self.frame.interval:
@@ -70,17 +66,13 @@ class TimerThread(Process) :
 
         self.Clock = time.time
 
-        # # this is an ugly hack because the cygwin and linux
-        # # versions of time.clock seem seriously broken
-        if platform.system() == 'Windows' :
-            self.Clock = time.clock
-
     # -----------------------------------------------------------------
     def run(self) :
         global profile
         # Wait for the signal to start the simulation, this allows all of the
         # connectors to initialize
-        self.frame.app.initialize()
+        self.frame.initialize_app()
+        self.cmds["Apps"][self.appname] = "Ready"
         while not self.cmds["SimulatorStartup"]:
             time.sleep(5.0)
 
@@ -89,16 +81,16 @@ class TimerThread(Process) :
                 os.mkdir('stats')
             self.profile = cProfile.Profile()
             self.profile.enable()
-            self.__Logger.debug("starting profiler for %s", self.frame.app._appname)
+            self.__Logger.debug("starting profiler for %s", self.appname)
 
         if INSTRUMENT:
             if not os.path.exists('stats'):
                 os.mkdir('stats')
             strtime = time.strftime("%Y-%m-%d_%H-%M-%S")
-            self.ifname = os.path.join('stats', "%s_bench_%s.csv" % (strtime, self.frame.app._appname))
+            self.ifname = os.path.join('stats', "%s_bench_%s.csv" % (strtime, self.appname))
 
             if platform.system() != "Windows":
-                linkname = os.path.join('stats', "latest_%s" % self.frame.app._appname)
+                linkname = os.path.join('stats', "latest_%s" % self.appname)
                 if os.path.exists(linkname):
                     os.remove(linkname)
                 os.symlink(os.path.abspath(self.ifname), linkname) # @UndefinedVariable only in Linux!
@@ -131,29 +123,29 @@ class TimerThread(Process) :
                 self.frame.execute_Frame()
 
                 etime = self.Clock()
-                delta = etime - stime
+                delta_secs = (etime - stime)
 
                 if INSTRUMENT:
                     with open(self.ifname, 'a', 0) as csvfile:
                     # csv.writer(["%.3f" % delta].append(self.inst_array))
                         writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
                         d = self.frame._instruments
-                        d['delta'] = delta * 1000
+                        d['delta'] = delta_secs * 1000
                         if self.CurrentIteration % 10 == 0:
                             d['nobjects'], d['mem buffer'] = self.frame.buffersize()
                         writer.writerow(d)
                         self.frame._instruments = {}
-                if delta < self.IntervalTime :
-                    time.sleep(self.IntervalTime - delta)
+                if delta_secs < self.IntervalTime :
+                    time.sleep(self.IntervalTime - delta_secs)
                 else:
-                    self.__Logger.warn("[%s]: Exceeded interval time by %s" , self.frame.app.__module__, delta)
+                    self.__Logger.warn("[%s]: Exceeded interval time by %s at iteration %s" , self.frame.app.__module__, delta_secs * 1000, self.CurrentIteration)
 
                 self.CurrentIteration += 1
         finally:
             if DEBUG:
                 self.profile.disable()
                 self.profile.create_stats()
-                self.profile.dump_stats(os.path.join('stats', "%s_stats.ps" % self.frame.app._appname))
+                self.profile.dump_stats(os.path.join('stats', "%s_stats.ps" % self.appname))
 
         # compute a few stats
         elapsed = self.Clock() - starttime
@@ -192,7 +184,7 @@ class Frame(object):
     '''
 
     Store = None
-    def __init__(self, store=None):
+    def __init__(self, store=None, process = False):
         '''
         Constructor
         '''
@@ -203,6 +195,7 @@ class Frame(object):
         self.step = 0
         self.curtime = time.time()
         self.__Logger = logger
+        self.process = process
 
         # Local storage for thread
         self.tlocal = None
@@ -261,10 +254,20 @@ class Frame(object):
         # self.timer = Timer(1.0, self.execute_Frame)
         # self.timer.start()
         self.cmds = cmd_dict
-        self.thread = TimerThread(self, Frame.Store, cmd_dict)
+        self.cmds["Apps"][self.app._appname] = "Initializing"
+        self.runner = TimerThread(self, Frame.Store, cmd_dict)
+        if self.process:
+            self.thread = Process(target=self.runner.run)
+        else:
+            self.thread = Thread(target=self.runner.run)
         self.thread.start()
-        # thread.join()
-        # self.stop()
+
+    def initialize_app(self):
+        self.app.initialize()
+        # Push initial objects the application has added.
+        self.push()
+        self.pull()
+
     def join(self):
         self.thread.join()
 
