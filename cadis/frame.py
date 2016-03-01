@@ -22,6 +22,7 @@ from cadis.language.schema import schema_data, CADISEncoder, subsetsof, \
     CADIS
 from cadis.store.remotestore import RemoteStore
 from cadis.store.simplestore import SimpleStore
+import datetime
 
 
 # import threading
@@ -40,7 +41,7 @@ INSTRUMENT_HEADERS = {}
 
 class TimerThread(object) :
     # -----------------------------------------------------------------
-    def __init__(self, frame, store, cmds) :
+    def __init__(self, frame, store, cmds, timer=None) :
         """
         This thread will drive the simulation steps by sending periodic clock
         ticks that each of the connectors can process.
@@ -50,15 +51,13 @@ class TimerThread(object) :
         store --
         """
 
-        #super(TimerThread, self).__init__()
-
         self.__Logger = logging.getLogger(__name__)
         self.frame = frame
         Frame.Store = store
         self.cmds = cmds
         self.appname = self.frame.app._appname
         self.CurrentIteration = 0
-        # self.IntervalTime = float(settings["General"]["Interval"])
+        self.timer = timer
         if self.frame.interval:
             self.IntervalTime = self.frame.interval
         else:
@@ -75,6 +74,11 @@ class TimerThread(object) :
         self.cmds["Apps"][self.appname] = "Ready"
         while not self.cmds["SimulatorStartup"]:
             time.sleep(5.0)
+
+        # timer can be set to stop the simulation automatically at a configured time
+        if self.timer:
+            # save start time, for checking when the application should be stopped
+            self.exec_start = datetime.datetime.now()
 
         if DEBUG:
             if not os.path.exists('stats'):
@@ -96,7 +100,7 @@ class TimerThread(object) :
                 os.symlink(os.path.abspath(self.ifname), linkname) # @UndefinedVariable only in Linux!
             with open(self.ifname, 'w', 0) as csvfile:
                 # Base headers
-                headers = ['delta', 'nobjects', 'mem buffer']
+                headers = ['delta', 'nobjects', 'mem buffer', 'vehicles']
                 # Annotated headers
                 headers.extend(INSTRUMENT_HEADERS[self.frame.__module__])
                 headers.extend(INSTRUMENT_HEADERS[self.frame.app.__module__])
@@ -131,6 +135,7 @@ class TimerThread(object) :
                         writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
                         d = self.frame._instruments
                         d['delta'] = delta_secs * 1000
+                        d['vehicles'] = self.frame.count(self.frame.name2class("Vehicle"))
                         if self.CurrentIteration % 10 == 0:
                             d['nobjects'], d['mem buffer'] = self.frame.buffersize()
                         writer.writerow(d)
@@ -141,6 +146,12 @@ class TimerThread(object) :
                     self.__Logger.warn("[%s]: Exceeded interval time by %s at iteration %s" , self.frame.app.__module__, delta_secs * 1000, self.CurrentIteration)
 
                 self.CurrentIteration += 1
+
+                # if a timer is set and we have run for the designated, send the shutdown message.
+                if self.timer:
+                    d = datetime.datetime.now() - self.exec_start
+                    if d > self.timer:
+                        self.cmds["SimulatorShutdown"] = True
         finally:
             if DEBUG:
                 self.profile.disable()
@@ -250,12 +261,23 @@ class Frame(object):
         self.process_declarations(app)
         #self.app.initialize()
 
-    def go(self, cmd_dict):
+    def name2class(self, typeName):
+        for t in self.storebuffer:
+            if t.__name__ == typeName:
+                return t
+
+    def count(self, typeObj):
+        if typeObj in self.storebuffer:
+            return len(self.storebuffer[typeObj])
+        else:
+            return -1
+
+    def go(self, cmd_dict, timer=None):
         # self.timer = Timer(1.0, self.execute_Frame)
         # self.timer.start()
         self.cmds = cmd_dict
         self.cmds["Apps"][self.app._appname] = "Initializing"
-        self.runner = TimerThread(self, Frame.Store, cmd_dict)
+        self.runner = TimerThread(self, Frame.Store, cmd_dict, timer)
         if self.process:
             self.thread = Process(target=self.runner.run)
         else:
@@ -493,6 +515,7 @@ class Frame(object):
                 Frame.Store.delete(t, o._primarykey, self.app._appname)
                 if t in self.pushlist and o._primarykey in self.pushlist[t]:
                     del self.pushlist[t][o._primarykey]
+            self.deletelist[t] = {}
 
         Frame.Store.update_all(self.pushlist, self.app._appname)
         # self.pushlist[t] = {}

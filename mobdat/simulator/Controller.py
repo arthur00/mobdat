@@ -54,6 +54,7 @@ from cadis.store.simplestore import SimpleStore
 from mobdat.common import LayoutSettings, WorldInfo
 from mobdat.common.Utilities import AuthByUserName
 from prime import PrimeSimulator
+import datetime
 
 
 sys.path.append(os.path.join(os.environ.get("OPENSIM", "/share/opensim"), "lib", "python"))
@@ -181,6 +182,18 @@ def Controller(settings) :
     cnames = settings["General"].get("Connectors", ['sumo', 'opensim', 'social', 'stats'])
     store_type = settings["General"].get("Store", "SimpleStore")
     process = settings["General"].get("MultiProcessing", False)
+    timer = settings["General"].get("Timer", None)
+    if timer:
+        secs = 0
+        minutes = 0
+        hours = 0
+        if "Seconds" in timer:
+            seconds = timer["Seconds"]
+        if "Minutes" in timer:
+            minutes = timer["Minutes"]
+        if "Hours" in timer:
+            hours = timer["Hours"]
+        timer = datetime.timedelta(seconds=seconds, minutes=minutes, hours=hours)
 
     connectors = []
 
@@ -215,7 +228,7 @@ def Controller(settings) :
         connector = _SimulationControllers[cname](settings, world, laysettings, cname, cframe)
         cframe.attach(connector)
         connectors.append(cframe)
-        cframe.go(cmd_dict)
+        cframe.go(cmd_dict, timer)
 
     controller = MobdatController(logger, connectors, cmd_dict)
     controller.cmdloop()
@@ -223,3 +236,4 @@ def Controller(settings) :
     for connproc in connectors :
         connproc.join()
     print "closing down controller"
+    sys.exit(0)

@@ -310,7 +310,7 @@ class SimpleStore(IStore):
                     if s != sim:
                         self.updates4sim[s][typeObj].delete(primkey)
             else:
-                self.__Logger__.debug("deleted object type %s ID %s missing from store", typeObj, primkey)
+                self.__Logger.debug("deleted object type %s ID %s missing from store", typeObj, primkey)
 
     def close(self):
         return
