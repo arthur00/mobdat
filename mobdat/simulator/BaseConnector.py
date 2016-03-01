@@ -95,6 +95,12 @@ class BaseConnector :
         self.vehicle_count = 0
         self.Clock = time.time
 
+        process = settings["General"].get("MultiProcessing", False)
+        maxt = settings["General"].get("MaximumTravelers", None)
+        timer = settings["General"].get("Timer", False)
+        if timer:
+            timer = "%s:%s:%s" % (timer["Hours"], timer["Minutes"], timer["Seconds"])
+
         ## this is an ugly hack because the cygwin and linux
         ## versions of time.clock seem seriously broken
         if platform.system() == 'Windows' :
@@ -104,10 +110,13 @@ class BaseConnector :
             if not os.path.exists('stats'):
                 os.mkdir('stats')
             strtime = time.strftime("%Y-%m-%d_%H-%M-%S")
-            self.ifname = os.path.join('stats', "%s_bench_%s.csv" % (strtime, self.__class__.__name__))
+            self.ifname = os.path.join('stats', "%s_original_%s.csv" % (strtime, self.__class__.__name__))
             with open(self.ifname, 'w', 0) as csvfile:
+                csvfile.write("########\n")
+                csvfile.write("Options, MultiProcessing : %s, MaximumTravelers : %s, Interval : %s, Timer: %s\n" % (process, maxt, self.Interval, timer))
+                csvfile.write("########\n\n")
                 # Base headers
-                headers = ['step', 'vehicles']
+                headers = ['step', 'vehicles', 'HandleEvent']
                 # Annotated headers
                 if self.__module__ in INSTRUMENT_HEADERS:
                     headers.extend(INSTRUMENT_HEADERS[self.__module__])

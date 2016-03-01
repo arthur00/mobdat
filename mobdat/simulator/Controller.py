@@ -60,7 +60,7 @@ INSTRUMENT = True
 INSTRUMENT_HEADERS = {}
 
 import platform, time, threading, cmd
-import EventRouter, EventTypes
+import EventRouter, EventTypes, EventHandler
 from mobdat.common.Utilities import AuthByUserName
 from mobdat.common import LayoutSettings, WorldInfo
 from multiprocessing import Process

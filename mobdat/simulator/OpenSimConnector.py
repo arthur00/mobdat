@@ -239,7 +239,7 @@ class OpenSimConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         evhandler -- the initialized event handler, EventRegistry type
         settings -- dictionary of settings from the configuration file
         """
-        INSTRUMENT_HEADERS[self.__module__].append("CreateObject")
+        #INSTRUMENT_HEADERS[self.__module__].append("CreateObject")
         self.Debug = True
         if self.Debug == True:
             self.debug_ct = 0

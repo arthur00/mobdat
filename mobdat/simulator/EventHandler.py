@@ -40,6 +40,8 @@ the simulation modules in the mobdat simulation environment.
 
 import os, sys, traceback
 import logging
+from mobdat.simulator.BaseConnector import instrument
+import time
 
 sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
@@ -118,7 +120,13 @@ class EventHandler :
     def HandleEvent(self, evtype, event) :
         if evtype in self.HandlerRegistry :
             for handler in self.HandlerRegistry[evtype] :
+                stime = time.time()
                 handler(event)
+                if hasattr(self, "_instruments"):
+                    if 'HandleEvent' in self._instruments:
+                        self._instruments['HandleEvent'] += (time.time() - stime) * 1000
+                    else:
+                        self._instruments['HandleEvent'] = (time.time() - stime) * 1000
                     
     # -----------------------------------------------------------------
     def Shutdown(self) :
