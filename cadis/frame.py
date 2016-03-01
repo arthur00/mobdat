@@ -4,45 +4,47 @@ Created on Dec 14, 2015
 @author: Arthur Valadares
 '''
 
-from threading import Timer
-from copy import deepcopy, copy
-from cadis.store.simplestore import SimpleStore
-import logging, sys
-from cadis.store.remotestore import RemoteStore
-from cadis.language.schema import schema_data, CADISEncoder, subsetsof,\
-    setsof, sets as schema_sets, subsets as schema_subsets, permutationsets as schema_permutationsets,\
-    CADIS
-import threading
-import time
-import platform
-import cProfile
-import signal
-import csv
-
-import uuid
-import random
 import StringIO
-import pstats
-import os
+import cProfile
+from copy import deepcopy, copy
+import csv
 from functools import wraps
-from cadis.common.IFramed import IFramed
+import logging, sys
+from multiprocessing import Process
+import os
+import platform
+import pstats
+import random
+import signal
+from threading import Timer
+import time
+import uuid
 
+from cadis.common.IFramed import IFramed
+from cadis.language.schema import schema_data, CADISEncoder, subsetsof, \
+    setsof, sets as schema_sets, subsets as schema_subsets, permutationsets as schema_permutationsets, \
+    CADIS
+from cadis.store.remotestore import RemoteStore
+from cadis.store.simplestore import SimpleStore
+
+
+# import threading
 logger = logging.getLogger(__name__)
 LOG_HEADER = "[FRAME]"
 
 USE_REMOTE_STORE = True # TODO Convert C# server to accept Strings instead of Integer
-DEBUG = False
+DEBUG = True
 INSTRUMENT = True
 INSTRUMENT_HEADERS = {}
 
-SimulatorStartup = False
-SimulatorShutdown = False
-SimulatorPaused = False
+# SimulatorStartup = False
+# SimulatorShutdown = False
+# SimulatorPaused = False
 
 
-class TimerThread(threading.Thread) :
+class TimerThread(Process) :
     # -----------------------------------------------------------------
-    def __init__(self, frame) :
+    def __init__(self, frame, store, cmds) :
         """
         This thread will drive the simulation steps by sending periodic clock
         ticks that each of the connectors can process.
@@ -52,12 +54,15 @@ class TimerThread(threading.Thread) :
         interval -- time between successive clock ticks
         """
 
-        threading.Thread.__init__(self)
+        # threading.Thread.__init__(self)
+        super(TimerThread, self).__init__()
 
         self.__Logger = logging.getLogger(__name__)
         self.frame = frame
+        Frame.Store = store
+        self.cmds = cmds
         self.CurrentIteration = 0
-        #self.IntervalTime = float(settings["General"]["Interval"])
+        # self.IntervalTime = float(settings["General"]["Interval"])
         if self.frame.interval:
             self.IntervalTime = self.frame.interval
         else:
@@ -65,18 +70,18 @@ class TimerThread(threading.Thread) :
 
         self.Clock = time.time
 
-        ## this is an ugly hack because the cygwin and linux
-        ## versions of time.clock seem seriously broken
+        # # this is an ugly hack because the cygwin and linux
+        # # versions of time.clock seem seriously broken
         if platform.system() == 'Windows' :
             self.Clock = time.clock
 
     # -----------------------------------------------------------------
     def run(self) :
-        global SimulatorStartup, SimulatorShutdown
         global profile
         # Wait for the signal to start the simulation, this allows all of the
         # connectors to initialize
-        while not SimulatorStartup:
+        self.frame.app.initialize()
+        while not self.cmds["SimulatorStartup"]:
             time.sleep(5.0)
 
         if DEBUG:
@@ -84,17 +89,19 @@ class TimerThread(threading.Thread) :
                 os.mkdir('stats')
             self.profile = cProfile.Profile()
             self.profile.enable()
-            self.__Logger.debug("starting profiler for %s", self.frame.app.__class__.__name__)
+            self.__Logger.debug("starting profiler for %s", self.frame.app._appname)
 
         if INSTRUMENT:
             if not os.path.exists('stats'):
                 os.mkdir('stats')
             strtime = time.strftime("%Y-%m-%d_%H-%M-%S")
-            self.ifname = os.path.join('stats', "%s_bench_%s.csv" % (strtime, self.frame.app.__class__.__name__))
-            linkname = os.path.join('stats', "latest_%s" % self.frame.app.__class__.__name__)
-            if os.path.exists(linkname):
-                os.remove(linkname)
-            os.symlink(os.path.abspath(self.ifname), linkname)
+            self.ifname = os.path.join('stats', "%s_bench_%s.csv" % (strtime, self.frame.app._appname))
+
+            if platform.system() != "Windows":
+                linkname = os.path.join('stats', "latest_%s" % self.frame.app._appname)
+                if os.path.exists(linkname):
+                    os.remove(linkname)
+                os.symlink(os.path.abspath(self.ifname), linkname) # @UndefinedVariable only in Linux!
             with open(self.ifname, 'w', 0) as csvfile:
                 # Base headers
                 headers = ['delta', 'nobjects', 'mem buffer']
@@ -115,8 +122,8 @@ class TimerThread(threading.Thread) :
         schema_data.frame = self.frame
 
         try:
-            while not SimulatorShutdown :
-                if SimulatorPaused:
+            while not self.cmds["SimulatorShutdown"]:
+                if self.cmds["SimulatorPaused"]:
                     time.sleep(self.IntervalTime)
                     continue
 
@@ -128,7 +135,7 @@ class TimerThread(threading.Thread) :
 
                 if INSTRUMENT:
                     with open(self.ifname, 'a', 0) as csvfile:
-                    #csv.writer(["%.3f" % delta].append(self.inst_array))
+                    # csv.writer(["%.3f" % delta].append(self.inst_array))
                         writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
                         d = self.frame._instruments
                         d['delta'] = delta * 1000
@@ -146,7 +153,7 @@ class TimerThread(threading.Thread) :
             if DEBUG:
                 self.profile.disable()
                 self.profile.create_stats()
-                self.profile.dump_stats(os.path.join('stats', "%s_stats.ps" % self.frame.app.__class__.__name__))
+                self.profile.dump_stats(os.path.join('stats', "%s_stats.ps" % self.frame.app._appname))
 
         # compute a few stats
         elapsed = self.Clock() - starttime
@@ -154,14 +161,13 @@ class TimerThread(threading.Thread) :
         self.__Logger.warn("%d iterations completed with an elapsed time %f or %f ms per iteration", self.CurrentIteration, elapsed, avginterval)
 
         self.frame.stop()
-        SimulatorShutdown = True
-
+        # self.cmds["SimulatorShutdown"] = True
 
 def instrument(f):
     if not INSTRUMENT:
         return f
     else:
-        #if f.func_name not in INSTRUMENT_HEADERS:
+        # if f.func_name not in INSTRUMENT_HEADERS:
         #    INSTRUMENT_HEADERS.append(f.func_name)
         if not f.__module__ in INSTRUMENT_HEADERS:
             INSTRUMENT_HEADERS[f.__module__] = []
@@ -176,7 +182,7 @@ def instrument(f):
             end = time.time()
             if not hasattr(obj, '_instruments'):
                 obj._instruments = {}
-            obj._instruments[f.__name__] = (end-start) * 1000
+            obj._instruments[f.__name__] = (end - start) * 1000
             return ret
         return instrument
 
@@ -249,15 +255,16 @@ class Frame(object):
     def attach(self, app):
         self.app = app
         self.process_declarations(app)
-        self.app.initialize()
+        #self.app.initialize()
 
-    def go(self):
-        #self.timer = Timer(1.0, self.execute_Frame)
-        #self.timer.start()
-        self.thread = TimerThread(self)
+    def go(self, cmd_dict):
+        # self.timer = Timer(1.0, self.execute_Frame)
+        # self.timer.start()
+        self.cmds = cmd_dict
+        self.thread = TimerThread(self, Frame.Store, cmd_dict)
         self.thread.start()
-        #thread.join()
-        #self.stop()
+        # thread.join()
+        # self.stop()
     def join(self):
         self.thread.join()
 
@@ -295,7 +302,7 @@ class Frame(object):
             self.observed = self.observed.union(app._gettersetter)
 
         for t in self.observed.union(self.produced).union(self.updated):
-            #self.changedproperties[t] = {}
+            # self.changedproperties[t] = {}
             self.storebuffer[t] = {}
             self.new_storebuffer[t] = {}
             self.mod_storebuffer[t] = {}
@@ -335,8 +342,8 @@ class Frame(object):
                 Frame.Store = RemoteStore()
             else:
                 Frame.Store = SimpleStore()
-
-        Frame.Store.register(self)
+        setattr(self.app, "_appname", self.app.__class__.__name__)
+        Frame.Store.register(self.app._appname)
 
     def execute_Frame(self):
         try:
@@ -351,8 +358,7 @@ class Frame(object):
             self.step += 1
             self.curtime = time.time()
         except:
-            global SimulatorPaused
-            SimulatorPaused = True
+            self.cmds["SimulatorPaused"] = True
             logger.exception("[%s] uncaught exception: ", self.app.__module__)
 
     def _fkobj(self, o):
@@ -378,7 +384,7 @@ class Frame(object):
             self.del_storebuffer[t] = {}
 
             if hasattr(Frame.Store, "getupdated"):
-                (new, mod, deleted) = Frame.Store.getupdated(t, self)
+                (new, mod, deleted) = Frame.Store.getupdated(t, self.app._appname)
                 if t in schema_subsets:
                     # Parent type of subset 't'
                     pt = setsof[t]
@@ -435,10 +441,11 @@ class Frame(object):
                         self.mod_storebuffer[t][o._primarykey] = o
                         if o.__class__ in self.fkdict:
                             self._fkobj(o)
-                    for o in deleted:
-                        if o._primarykey in self.storebuffer[t]:
-                            del self.storebuffer[t][o._primarykey]
-                            self.del_storebuffer[t][o._primarykey] = o
+                    for key in deleted:
+                        if key in self.storebuffer[t]:
+                            o = self.storebuffer[t][key]
+                            self.del_storebuffer[t][key] = o
+                            del self.storebuffer[t][key]
                         if o.__class__ in self.fkdict:
                             self._delfkobj(o)
 
@@ -447,11 +454,11 @@ class Frame(object):
                 for o in Frame.Store.get(t):
                     tmpbuffer[t][o._primarykey] = o
 
-                #TODO: Remove when Store does this
+                # TODO: Remove when Store does this
                 # Added objects since last pull
                 for o in tmpbuffer[t].values():
                     if o._primarykey not in self.storebuffer[t]:
-                        #logger.debug("%s Found new object: %s", LOG_HEADER, o)
+                        # logger.debug("%s Found new object: %s", LOG_HEADER, o)
                         self.new_storebuffer[t][o._primarykey] = o
                     else:
                         # check if updated
@@ -469,26 +476,24 @@ class Frame(object):
 
     @instrument
     def push(self):
-        for t in self.pushlist:
-            for primkey in self.pushlist[t].keys():
-                if primkey in self.newlyproduced[t]:
-                    continue
-                elif primkey in self.storebuffer[t]:
-                    Frame.Store.update(t, primkey, self, self.pushlist[t][primkey])
+        for t in self.newlyproduced:
+            if len(self.newlyproduced[t]) > 0:
+                if hasattr(Frame.Store, "insert_all"):
+                    Frame.Store.insert_all(t, self.newlyproduced[t].values(), self.app._appname)
                 else:
-                    logger.error("[%s] Missing object in store buffer. Object ID %s,  Pushlist: %s", self.app, primkey, self.pushlist[t])
-            self.pushlist[t] = {}
-
-        for t in self.produced:
-            if t in self.newlyproduced:
-                for o in self.newlyproduced[t].values():
-                    #logger.debug("[%s] Adding obj %s (ID %s) to store", self.app, o, o._primarykey)
-                    Frame.Store.insert(o, self)
-                self.newlyproduced[t] = {}
+                    for o in self.newlyproduced[t].values():
+                        Frame.Store.insert(o, self.app._appname)
+            self.newlyproduced[t] = {}
 
         for t in self.deletelist:
             for o in self.deletelist[t].values():
-                Frame.Store.delete(t, o)
+                Frame.Store.delete(t, o._primarykey, self.app._appname)
+                if t in self.pushlist and o._primarykey in self.pushlist[t]:
+                    del self.pushlist[t][o._primarykey]
+
+        Frame.Store.update_all(self.pushlist, self.app._appname)
+        # self.pushlist[t] = {}
+
 
     def set_property(self, t, o, v, n):
         # Newly produced items will be pushed entirely. Skip...
@@ -496,30 +501,34 @@ class Frame(object):
             return
 
         if t in self.newlyproduced and o._primarykey in self.newlyproduced[t]:
-            #logger.debug("[%s] Object ID %s in newly produced")
+            # logger.debug("[%s] Object ID %s in newly produced")
             return
 
         # Object not tracked by store yet. Ignore...
         if o._primarykey not in self.storebuffer[t]:
-            #logger.debug("[%s] Object ID %s not being tracked yet")
+            # logger.debug("[%s] Object ID %s not being tracked yet")
             return
 
         if o._primarykey not in self.pushlist[t]:
             self.pushlist[t][o._primarykey] = {}
 
-        #logger.debug("[%s] Object ID %s property %s being set to %s")
+        # logger.debug("[%s] Object ID %s property %s being set to %s")
         # Save the property update
         self.pushlist[t][o._primarykey][n] = v
-        #logger.debug("property %s of object %s (ID %s) set to %s", n, o, o._primarykey, v)
+        # logger.debug("property %s of object %s (ID %s) set to %s", n, o, o._primarykey, v)
 
     def add(self, obj):
-        if obj.__class__ in self.storebuffer:
-            #logger.debug("%s Creating new object %s.%s", LOG_HEADER, obj.__class__, obj._primarykey)
+        t = obj.__class__
+        if t in self.storebuffer:
+            # logger.debug("%s Creating new object %s.%s", LOG_HEADER, obj.__class__, obj._primarykey)
             if obj._primarykey == None:
-                obj._primarykey =  uuid.uuid4()
+                obj._primarykey = uuid.uuid4()
             obj._frame = self
-            self.newlyproduced[obj.__class__][obj._primarykey] = obj
-            self.storebuffer[obj.__class__][obj._primarykey] = obj
+            self.newlyproduced[t][obj._primarykey] = obj
+            self.storebuffer[t][obj._primarykey] = obj
+            # If we removed then readded in the same tick, make sure we don't send the remove anymore
+            if t in self.deletelist and obj._primarykey in self.deletelist[t]:
+                del self.deletelist[t][obj._primarykey]
         else:
             logger.error("%s Object not in dictionary: %s", LOG_HEADER, obj.__class__)
 
@@ -528,6 +537,10 @@ class Frame(object):
             o = self.storebuffer[t][oid]
             self.deletelist[t][o._primarykey] = o
             del self.storebuffer[t][oid]
+            # If we added and removed in the same tick, make sure we don't send the add
+            if t in self.newlyproduced and o._primarykey in self.newlyproduced[t]:
+                del self.newlyproduced[t][o._primarykey]
+
         else:
             logger.warn("could not find object %s in storebuffer")
         return True
@@ -545,7 +558,7 @@ class Frame(object):
             if propvalue in self.fkdict[cls][fname]:
                 primkey = self.fkdict[cls][fname][propvalue]
             else:
-                #logger.error("Could not find property value in foreign key dictionary.")
+                # logger.error("Could not find property value in foreign key dictionary.")
                 return None
             if primkey in self.storebuffer[cls]:
                 newobj = self.storebuffer[cls][primkey]

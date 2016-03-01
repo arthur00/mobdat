@@ -3,17 +3,19 @@ Created on Dec 14, 2015
 
 @author: Arthur Valadares
 '''
+from __builtin__ import type
+from copy import copy, deepcopy
+import httplib
+import logging
+import pydevd
+import sys
+import threading
 
 from cadis.common.IStore import IStore
 from cadis.language import schema
-from copy import copy, deepcopy
-import httplib
-import sys
-import logging
-import threading
-from __builtin__ import type
-from cadis.language.schema import StorageObjectFactory,\
+from cadis.language.schema import StorageObjectFactory, \
     PermutationObjectfactory, permutationsets, subsets
+
 
 class SubSetFrameUpdate(object):
     def __init__(self, t, store):
@@ -68,20 +70,20 @@ class FrameUpdate(object):
 
     def add(self, o):
         self.added.add(o._primarykey)
-        if hasattr(o,"_storageobj"):
+        if hasattr(o, "_storageobj"):
             self.storageobj.add(o._primarykey)
 
     def update(self, o):
         self.updated.add(o._primarykey)
-        if hasattr(o,"_storageobj"):
+        if hasattr(o, "_storageobj"):
             self.storageobj.add(o._primarykey)
 
-    def delete(self, o):
-        if o._primarykey in self.added:
-            self.added.remove(o._primarkey)
-        if o._primarykey in self.updated:
-            self.updated.remove(o._primarkey)
-        self.deleted.add(o._primarykey)
+    def delete(self, primkey):
+        if primkey in self.added:
+            self.added.remove(primkey)
+        if primkey in self.updated:
+            self.updated.remove(primkey)
+        self.deleted.add(primkey)
 
     def updatelist(self, clear=False):
         cp_added = copy(self.added)
@@ -120,25 +122,25 @@ class SimpleStore(IStore):
     app = None
     store = {}
     subsets = {}
-    updates4sim = {}
+    name2class = {}
     lock = threading.RLock()
     __Logger = logging.getLogger(__name__)
 
-    def __init__(self):
+    def __init__(self, server=False):
         '''
         Constructor
         '''
+        self.updates4sim = {}
 
-        #self.store = {}
-        #self.subsets = {}
-        #self.updates = {}
         for t in schema.sets.union(schema.permutationsets):
             if t not in self.store:
                 self.store[t] = {}
+                SimpleStore.name2class[t._FULLNAME] = t
         for t in schema.subsets:
             if t not in self.subsets:
                 self.subsets[t] = {}
-        #for t in schema.permutedclss:
+                SimpleStore.name2class[t._FULLNAME] = t
+        # for t in schema.permutedclss:
         #    self.store[t] = {}
 
     def register(self, sim):
@@ -154,11 +156,11 @@ class SimpleStore(IStore):
             cls = obj.__class__
             # Only accepts inserts of sets and permutations
             if cls not in self.store:
-                #self.store[obj.__class__] = {}
+                # self.store[obj.__class__] = {}
                 self.__Logger.error("ERROR! Object type supposed to exist in store")
                 return False
             if obj._primarykey in self.store[cls]:
-                #new = True
+                # new = True
                 self.__Logger.error("ERROR! Insert should only be used for new items")
                 return False
 
@@ -185,7 +187,7 @@ class SimpleStore(IStore):
                         self.updates4sim[s][o._originalcls].add(o)
                     else:
                         self.updates4sim[s][o.__class__].add(o)
-##
+# #
 
     def CreatePermutationObject(self, obj):
         storageobj = StorageObjectFactory(obj)
@@ -200,7 +202,7 @@ class SimpleStore(IStore):
                 else:
                     permutedobj = cls()
                     permutedobj.ID = obj.ID
-                    #permutation of permutation
+                    # permutation of permutation
                     if cls in permutationsets:
                         storageobj.objectlinks[cls], nos = self.CreatePermutationObject(permutedobj)
                         newobjs.union(nos)
@@ -217,40 +219,47 @@ class SimpleStore(IStore):
                 newobjs.add(permutedobj)
                 self.store[cls][permutedobj.ID] = permutedobj
 
-        #self.store[obj.__class__][obj._primarykey] = storageobj
-        #obj = storageobj
+        # self.store[obj.__class__][obj._primarykey] = storageobj
+        # obj = storageobj
         return storageobj, newobjs
 
-    def update(self, typeObj, primkey, sim, pushlist):
-        if primkey not in self.store[typeObj]:
-            self.__Logger.info("could not find key %s in store for type %s", primkey, typeObj)
-            return None
-        obj = self.store[typeObj][primkey]
-        for pname in pushlist.keys():
-            #logger.debug("Setting attributes in pushlist for ID %s: %s = %s",primkey,propname,self.pushlist[t][primkey][propname])
-            if hasattr(obj, "objectlinks"):
-                try:
-                    #cls = typeObj.__dimensiontable__[pname]
-                    pobj = self.store[obj._originalcls][primkey]
-                    setattr(pobj, pname, pushlist[pname])
-                except:
-                    self.__Logger.exception("Something went wrong.")
-            else:
-                setattr(obj, pname, pushlist[pname])
+    def update(self, t, update_dict, sim):
+        # update_dict: { primary_key : { property_name : property_value } }
+        for primkey in update_dict.keys():
+            if primkey not in self.store[t]:
+                self.__Logger.info("could not find key %s in store for type %s", primkey, t)
+                return None
 
-        # TODO: There's a better way of doing this..
-        for s in self.updates4sim.keys():
-            if s != sim:
-                self.updates4sim[s][typeObj].update(obj)
+            obj = self.store[t][primkey]
+            updates = update_dict[primkey]
+            for pname in updates:
+                if hasattr(obj, "objectlinks"):
+                    try:
+                        # cls = typeObj.__dimensiontable__[pname]
+                        pobj = self.store[obj._originalcls][primkey]
+                        setattr(pobj, pname, updates[pname])
+                    except:
+                        self.__Logger.exception("Something went wrong.")
+                else:
+                    setattr(obj, pname, updates[pname])
 
-    def get(self, typeObj, copy = True):
+            # TODO: There's a better way of doing this..
+            for s in self.updates4sim.keys():
+                if s != sim:
+                    self.updates4sim[s][t].update(obj)
+
+    def update_all(self, pushlist, sim):
+        for t in pushlist.keys():
+            self.update(t, pushlist[t], sim)
+
+    def get(self, typeObj, copy=True):
         with self.lock:
             if typeObj in self.store:
                 if typeObj in permutationsets:
                     res = []
                     for o in self.store[typeObj].values():
                         res.append(PermutationObjectfactory(o))
-                    #self.__Logger.warn("Retrieving permuted sets not yet implemented.")
+                    # self.__Logger.warn("Retrieving permuted sets not yet implemented.")
                     return res
                 else:
                     if copy:
@@ -263,6 +272,7 @@ class SimpleStore(IStore):
                     o.__class__ = typeObj
                 return res
             else:
+                pydevd.settrace()
                 self.__Logger.error("ERROR! Object type supposed to exist as a set or subset")
                 sys.exit(0)
 
@@ -270,22 +280,28 @@ class SimpleStore(IStore):
         if key in self.store[typeObj]:
             return copy(self.store[typeObj][key])
         else:
-            self.__Logger.error("Could not find key %s for object type %s",key, typeObj)
+            self.__Logger.error("Could not find key %s for object type %s", key, typeObj)
 
     def getupdated(self, typeObj, sim):
         with self.lock:
             if typeObj in self.subsets:
                 res = typeObj.query(self)
-                #for o in res:
+                # for o in res:
                 #    o.__class__ = typeObj
                 return self.updates4sim[sim][typeObj].get_update(res)
             else:
                 return self.updates4sim[sim][typeObj].updatelist(True)
 
-    def delete(self, typeObj, obj):
+    def delete(self, typeObj, primkey, sim):
         with self.lock:
-            if obj._primarykey in self.store[typeObj]:
-                del self.store[typeObj][obj._primarykey]
+            if primkey in self.store[typeObj]:
+                del self.store[typeObj][primkey]
+                # TODO: There's a better way of doing this..
+                for s in self.updates4sim.keys():
+                    if s != sim:
+                        self.updates4sim[s][typeObj].delete(primkey)
+            else:
+                self.__Logger__.debug("deleted object type %s ID %s missing from store", typeObj, primkey)
 
     def close(self):
         return

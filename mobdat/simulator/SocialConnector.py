@@ -239,9 +239,11 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
     def initialize(self, limit = None) :
         self.mybusiness = None
         # Limit the number of objects for testing purposes
+        ilimit = 0
         plimit = None
         rlimit = None
         blimit = None
+        rolimit = 0
         if self.DataFolder:
             try:
                 f = open(os.path.join(self.DataFolder,"people.js"), "r")
@@ -278,7 +280,7 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
                 jsonlist = json.loads(f.read())
                 self.cadis_roads = self.__decode__(jsonlist, Road)
                 f.close()
-                for road in self.cadis_roads[:limit]:
+                for road in self.cadis_roads[:rolimit]:
                     self.frame.add(road)
             except:
                 self.__Logger.exception("could not read data from roads.js")
@@ -288,7 +290,7 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
                 jsonlist = json.loads(f.read())
                 self.intersections = self.__decode__(jsonlist, SimulationNode)
                 f.close()
-                for intersection in self.intersections[:limit]:
+                for intersection in self.intersections[:ilimit]:
                     self.frame.add(intersection)
             except:
                 self.__Logger.exception("could not read data from roads.js")

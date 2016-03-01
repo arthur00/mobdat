@@ -11,6 +11,7 @@ import logging
 from mobdat.common.ValueTypes import Vector3
 import random
 from cadis.frame import instrument
+from random import randint
 
 @Producer(Vehicle, BusinessNode, SimulationNode, PrimeNode)
 @GetterSetter(Vehicle, Person, BusinessNode, ResidentialNode, SimulationNode, PrimeNode, EmptyBusiness)
@@ -65,7 +66,7 @@ class PrimeSimulator(IFramed):
             for c in self.schedule_deliveries[self.CurrentStep]:
                 if hasattr(c.LivesAt, "Rezcap"):
                     v = Vehicle()
-                    v.Name = "AmazonTo%s" % c.Name
+                    v.Name = "AmazonTo%s_%s" % (c.Name, randint(0, 100))
                     v.Type = c.Vehicle.VehicleType
                     v.Route = self.mybusiness.Rezcap.DestinationName
                     v.Target = c.LivesAt.Rezcap.SourceName

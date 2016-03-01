@@ -17,7 +17,10 @@ class IStore(object):
     def get(self, typeObj):
         return
 
-
     @abc.abstractmethod
     def close(self):
+        return
+
+    @abc.abstractmethod
+    def delete(self, typeObj, primkey):
         return

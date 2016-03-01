@@ -41,7 +41,8 @@ Vector3 for positions and velocity and Quaternion for rotations.
 import os, sys
 import random, math
 
-sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
+if os.environ.get("SUMO_HOME"):
+    sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "lib")))
@@ -251,9 +252,9 @@ class Quaternion :
     @staticmethod
     def __decode__(dic):
         if 'x' in dic and 'y' in dic and 'z' in dic and 'w' in dic:
-            return Vector3(dic['x'], dic['y'], dic['z'], dic['w'])
+            return Quaternion(dic['x'], dic['y'], dic['z'], dic['w'])
         elif 'X' in dic and 'Y' in dic and 'Z' in dic and 'W' in dic:
-            return Vector3(dic['X'], dic['Y'], dic['Z'], dic['W'])
+            return Quaternion(dic['X'], dic['Y'], dic['Z'], dic['W'])
         else:
             raise Exception("Could not decode Vector3 with dic %s" % dic)
 

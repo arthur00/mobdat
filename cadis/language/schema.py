@@ -10,6 +10,8 @@ import json
 import threading
 from uuid import UUID, uuid4
 import sys
+from json.encoder import JSONEncoder
+from json.decoder import JSONDecoder
 logger = logging.getLogger(__name__)
 LOG_HEADER = "[SCHEMA]"
 
@@ -232,17 +234,36 @@ def PermutationObjectfactory(sobj, ret_obj = None):
             ret_obj.ID = o.ID
     return ret_obj
 
+# class CADISDecoder(json.JSONEncoder):
+#     def __init__(self):
+#         JSONDecoder.__init__(self, object_hook=self.dict_to_object)
+#
+#     def dict_to_object(self, d):
+#         return d
+
 class CADISEncoder(json.JSONEncoder):
     def default(self, obj):
-        obj_dict = {}
+        #print "In CADIS Encoder!"
         if isinstance(obj, CADIS):
-            for dim in obj._dimensions:
-                prop = getattr(obj, dim._name)
-                if hasattr(prop, "__json__"):
-                    obj_dict[dim._name] = prop.__json__()
-                else:
-                    if isinstance(prop, UUID):
-                        obj_dict[dim._name] = str(prop)
+            try:
+                obj_dict = {}
+                for dim in obj._dimensions:
+                    prop = getattr(obj, dim._name)
+                    if hasattr(prop, "__json__"):
+                        obj_dict[dim._name] = prop.__json__()
                     else:
-                        obj_dict[dim._name] = prop
-            return obj_dict
+                        if isinstance(prop, UUID):
+                            obj_dict[dim._name] = str(prop)
+                        else:
+                            obj_dict[dim._name] = prop
+                obj_dict["ID"] = obj.ID
+                return obj_dict
+            except:
+                self.__Logger.debug("Could not convert encode object from Python -> JSON")
+                raise
+        elif isinstance(obj, UUID):
+            return str(obj)
+        elif hasattr(obj, "__json__"):
+            return obj.__json__()
+        else:
+            return JSONEncoder.default(self, obj)

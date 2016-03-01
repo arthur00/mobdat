@@ -149,6 +149,7 @@ def SetupLoggers() :
     logger.addHandler(clog)
 
     logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("requests").setLevel(logging.WARNING)
 
 
 # -----------------------------------------------------------------
