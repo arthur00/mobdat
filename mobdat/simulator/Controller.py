@@ -184,7 +184,7 @@ def Controller(settings) :
     process = settings["General"].get("MultiProcessing", False)
     timer = settings["General"].get("Timer", None)
     if timer:
-        secs = 0
+        seconds = 0
         minutes = 0
         hours = 0
         if "Seconds" in timer:
