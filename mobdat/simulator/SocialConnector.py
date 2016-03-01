@@ -151,6 +151,7 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
 
         event = EventTypes.EventAddVehicle(vname, vtype, rname, tname)
         self.PublishEvent(event)
+        self.vehicle_count += 1
 
     # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
     # EVENT HANDLERS
@@ -170,6 +171,7 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         
         trip = self.TripCallbackMap.pop(vname)
         trip.TripCompleted(self)
+        self.vehicle_count -= 1
 
     # -----------------------------------------------------------------
     @instrument

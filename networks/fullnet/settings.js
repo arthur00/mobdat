@@ -7,6 +7,13 @@
         "StartTimeOfDay" : 7.0,
         "MaximumTravelers" : 1000,
 		"WorldInfoFile" : "worldinfo.js",
+		"MultiProcessing" : false,
+		"Timer" :
+		{
+			"Seconds" : 0,
+			"Minutes" : 1,
+			"Hours" : 0
+		},
         "Connectors" : ["opensim", "sumo", "social"]
     },
 

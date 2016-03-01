@@ -178,6 +178,7 @@ class SumoConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         for v in alist :
             event = EventTypes.EventDeleteObject(v)
             self.PublishEvent(event)
+            self.vehicle_count -= 1
 
     # -----------------------------------------------------------------
     def HandleVehicleUpdates(self, currentStep) :
@@ -199,6 +200,7 @@ class SumoConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         self.__Logger.warn('add vehicle %s going from %s to %s', event.ObjectIdentity, event.Route, event.Target)
         traci.vehicle.add(event.ObjectIdentity, event.Route, typeID=event.ObjectType)
         traci.vehicle.changeTarget(event.ObjectIdentity, event.Target)
+        self.vehicle_count += 1
 
     # -----------------------------------------------------------------
     # Returns True if the simulation can continue

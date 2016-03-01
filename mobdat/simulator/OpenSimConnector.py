@@ -331,8 +331,10 @@ class OpenSimConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         vname = event.ObjectIdentity
         self.Vehicles2Sim[vname] = sim
 
+        self.vehicle_count += 1
+
         self.__Logger.debug("create vehicle %s with type %s", vname, vtypename)
-        
+
         if len(sim["VehicleReuseList"][vtypename]) > 0 :
             vehicle = sim["VehicleReuseList"][vtypename].popleft()
             # self.__Logger.debug("reuse vehicle %s for %s", vehicle.VehicleName, vname)
@@ -356,12 +358,12 @@ class OpenSimConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
             vtype.AssetID = assetid
 
         conn = sim["RemoteControl"]
-        stime = time.time()
+        #stime = time.time()
         result = conn.CreateObject(vtype.AssetID, objectid=vuuid, name=vname, parm=vtype.StartParameter, async=True)
-        etime = time.time()
-        if not hasattr(self, "_instruments"):
-            self._instruments = {}
-        self._instruments["CreateObject"] = (etime-stime)*1000
+        #etime = time.time()
+        #if not hasattr(self, "_instruments"):
+        #    self._instruments = {}
+        #self._instruments["CreateObject"] = (etime-stime)*1000
  
         # self.__Logger.debug("create new vehicle %s with id %s", vname, vuuid)
         return True
@@ -392,6 +394,7 @@ class OpenSimConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         vehicle.InUpdateQueue = True
 
         self.WorkQ.put(vehicle.VehicleName)
+        self.vehicle_count -= 1
 
         # result = self.OpenSimConnector.DeleteObject(vehicleID)
         # result = sim["RemoteControl"].DeleteObject(vehicleID)

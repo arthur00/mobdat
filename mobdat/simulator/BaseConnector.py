@@ -69,7 +69,10 @@ def instrument(f):
             end = time.time()
             if not hasattr(obj, '_instruments'):
                 obj._instruments = {}
-            obj._instruments[f.__name__] = (end-start) * 1000
+            if f.__name__ in obj._instruments:
+                obj._instruments[f.__name__] += (end-start) * 1000
+            else:
+                obj._instruments[f.__name__] = (end-start) * 1000
             return ret
         return instrument
 
@@ -89,7 +92,7 @@ class BaseConnector :
         self.SecondsPerStep = float(settings["General"].get("SecondsPerStep", 2.0))
         self.StartTimeOfDay = float(settings["General"].get("StartTimeOfDay", 8.0))
         self.RealDayLength = 24.0 * self.Interval / self.SecondsPerStep
-
+        self.vehicle_count = 0
         self.Clock = time.time
 
         ## this is an ugly hack because the cygwin and linux
@@ -104,7 +107,7 @@ class BaseConnector :
             self.ifname = os.path.join('stats', "%s_bench_%s.csv" % (strtime, self.__class__.__name__))
             with open(self.ifname, 'w', 0) as csvfile:
                 # Base headers
-                headers = ['step']
+                headers = ['step', 'vehicles']
                 # Annotated headers
                 if self.__module__ in INSTRUMENT_HEADERS:
                     headers.extend(INSTRUMENT_HEADERS[self.__module__])
@@ -153,6 +156,7 @@ class BaseConnector :
                 writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
                 d = self._instruments
                 d['step'] = event.Step
+                d['vehicles'] = self.vehicle_count
                 #if self.CurrentIteration % 10 == 0:
                 #    d['nobjects'], d['mem buffer'] = self.frame.buffersize()
                 writer.writerow(d)

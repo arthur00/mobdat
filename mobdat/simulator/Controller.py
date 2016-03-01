@@ -42,6 +42,8 @@ clock ticks.
 import os, sys
 import logging
 import csv
+from threading import Thread
+import datetime
 
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
@@ -95,6 +97,20 @@ class TimerThread(threading.Thread) :
         self.__Logger = logging.getLogger(__name__)
         self.EventRouter = evrouter
         self.IntervalTime = float(settings["General"]["Interval"])
+        timer = settings["General"].get("Timer", None)
+        if timer:
+            seconds = 0
+            minutes = 0
+            hours = 0
+            if "Seconds" in timer:
+                seconds = timer["Seconds"]
+            if "Minutes" in timer:
+                minutes = timer["Minutes"]
+            if "Hours" in timer:
+                hours = timer["Hours"]
+            self.timer = datetime.timedelta(seconds=seconds, minutes=minutes, hours=hours)
+        else:
+            self.timer = None
 
         global FinalIteration
         FinalIteration = settings["General"].get("TimeSteps",0)
@@ -120,6 +136,11 @@ class TimerThread(threading.Thread) :
         self.__Logger.debug("start main simulation loop")
         starttime = self.Clock()
 
+        # timer can be set to stop the simulation automatically at a configured time
+        if self.timer:
+            # save start time, for checking when the application should be stopped
+            self.exec_start = datetime.datetime.now()
+
         CurrentIteration = 0
         while not SimulatorShutdown :
             if FinalIteration > 0 and CurrentIteration >= FinalIteration :
@@ -132,13 +153,19 @@ class TimerThread(threading.Thread) :
 
             etime = self.Clock()
 
-            if (etime - stime) < self.IntervalTime :
-                time.sleep(self.IntervalTime - (etime - stime))
-
             CurrentIteration += 1
             if INSTRUMENT:
                 ievent = EventTypes.InstrumentEvent(CurrentIteration)
                 self.EventRouter.RouterQueue.put(ievent)
+
+            # if a timer is set and we have run for the designated, send the shutdown message.
+            if self.timer:
+                d = datetime.datetime.now() - self.exec_start
+                if d > self.timer:
+                    SimulatorShutdown = True
+
+            if (etime - stime) < self.IntervalTime :
+                time.sleep(self.IntervalTime - (etime - stime))
 
         # compute a few stats
         elapsed = self.Clock() - starttime
@@ -225,6 +252,7 @@ def Controller(settings) :
     infofile = settings["General"].get("WorldInfoFile","info.js")
     logger.info('loading world data from %s',infofile)
     world = WorldInfo.WorldInfo.LoadFromFile(infofile)
+    process = settings["General"].get("MultiProcessing", False)
 
     cnames = settings["General"].get("Connectors",['sumo', 'opensim', 'social', 'stats'])
     #if 'opensim' in cnames:
@@ -241,11 +269,17 @@ def Controller(settings) :
             continue
 
         connector = _SimulationControllers[cname](evrouter, settings, world, laysettings, cname)
-        connproc = Process(target=connector.SimulationStart, args=())
+        if process:
+            connproc = Process(target=connector.SimulationStart, args=())
+        else:
+            connproc = Thread(target=connector.SimulationStart, args=())
         connproc.start()
         connectors.append(connproc)
 
-    evrouterproc = Process(target=evrouter.RouteEvents, args=())
+    if process:
+        evrouterproc = Process(target=evrouter.RouteEvents, args=())
+    else:
+        evrouterproc = Thread(target=evrouter.RouteEvents, args=())
     evrouterproc.start()
 
     # start the timer thread
