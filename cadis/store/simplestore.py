@@ -7,7 +7,6 @@ from __builtin__ import type
 from copy import copy, deepcopy
 import httplib
 import logging
-import pydevd
 import sys
 import threading
 
@@ -281,7 +280,6 @@ class SimpleStore(IStore):
                     o.__class__ = typeObj
                 return res
             else:
-                pydevd.settrace()
                 self.__Logger.error("ERROR! Object type supposed to exist as a set or subset")
                 sys.exit(0)
 

@@ -172,7 +172,6 @@ class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
         #        self.PublishEvent(event)
 
     # -----------------------------------------------------------------
-    @instrument
     def HandleDepartedVehicles(self) :
         dlist = traci.simulation.getDepartedIDList()
         for v in dlist :
@@ -189,7 +188,6 @@ class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
             #self.PublishEvent(event)
 
     # -----------------------------------------------------------------
-    @instrument
     def HandleArrivedVehicles(self) :
         alist = traci.simulation.getArrivedIDList()
         for v in alist :
@@ -200,7 +198,6 @@ class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
             del self.cars[v]
 
     # -----------------------------------------------------------------
-    @instrument
     def HandleVehicleUpdates(self) :
         changelist = traci.vehicle.getSubscriptionResults()
         for v, info in changelist.iteritems() :
@@ -217,7 +214,6 @@ class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
     #     traci.vehicle.rerouteTraveltime(str(event.ObjectIdentity))
 
     # -----------------------------------------------------------------
-    @instrument
     def NewVehicles(self):
         added = self.frame.new(Vehicle)
         #self.__Logger.debug("Tick SUMO: New vehicles %s", added)

@@ -153,7 +153,7 @@ class Traveler :
                 destination = self.LocationKeyMap.ResolveLocationKey(tripev.DstName)
                 self.Connector.AddTripToEventQueue(Trip.Trip(self, starttime, source, destination))
 
-                logger.info('Scheduled trip of to %s for %s from %s to %s', tripev.DstName, self.Person.Name, source.Name, destination.Name)
+                logger.debug('Scheduled trip of to %s for %s from %s to %s', tripev.DstName, self.Person.Name, source.Name, destination.Name)
                 return
 
             # this just allows us to start in the middle of the day, traveler at work

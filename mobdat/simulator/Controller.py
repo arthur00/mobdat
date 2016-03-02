@@ -43,7 +43,6 @@ import logging
 from multiprocessing import Process, Manager
 import os, sys
 import platform, time, threading, cmd
-import pydevd
 
 import EventRouter, EventTypes
 import SumoConnector, OpenSimConnector, SocialConnector, StatsConnector
@@ -224,7 +223,7 @@ def Controller(settings) :
             logger.warn('skipping unknown simulation connector; %s' % (cname))
             continue
 
-        cframe = Frame(Store(), process)
+        cframe = Frame(Store(), process, settings)
         connector = _SimulationControllers[cname](settings, world, laysettings, cname, cframe)
         cframe.attach(connector)
         connectors.append(cframe)

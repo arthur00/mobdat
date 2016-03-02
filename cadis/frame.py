@@ -74,6 +74,9 @@ class TimerThread(object) :
         self.cmds["Apps"][self.appname] = "Ready"
         while not self.cmds["SimulatorStartup"]:
             time.sleep(5.0)
+        maxt = None
+        if self.frame.settings:
+            maxt = self.frame.settings["General"].get("MaximumTravelers", None)
 
         # timer can be set to stop the simulation automatically at a configured time
         if self.timer:
@@ -91,14 +94,17 @@ class TimerThread(object) :
             if not os.path.exists('stats'):
                 os.mkdir('stats')
             strtime = time.strftime("%Y-%m-%d_%H-%M-%S")
-            self.ifname = os.path.join('stats', "%s_bench_%s.csv" % (strtime, self.appname))
-
+            self.ifname = os.path.join('stats', "%s_frame_%s.csv" % (strtime, self.appname))
             if platform.system() != "Windows":
                 linkname = os.path.join('stats', "latest_%s" % self.appname)
                 if os.path.exists(linkname):
                     os.remove(linkname)
                 os.symlink(os.path.abspath(self.ifname), linkname) # @UndefinedVariable only in Linux!
             with open(self.ifname, 'w', 0) as csvfile:
+                csvfile.write("########\n")
+                csvfile.write("Options, MultiProcessing : %s, MaximumTravelers : %s, Interval : %s, Timer: %s, Store: %s\n" %
+                              (self.frame.process, maxt, self.IntervalTime, self.timer, type(Frame.Store).__name__))
+                csvfile.write("########\n\n")
                 # Base headers
                 headers = ['delta', 'nobjects', 'mem buffer', 'vehicles']
                 # Annotated headers
@@ -195,7 +201,7 @@ class Frame(object):
     '''
 
     Store = None
-    def __init__(self, store=None, process = False):
+    def __init__(self, store = None, process = False, settings = None):
         '''
         Constructor
         '''
@@ -207,6 +213,7 @@ class Frame(object):
         self.curtime = time.time()
         self.__Logger = logger
         self.process = process
+        self.settings = settings
 
         # Local storage for thread
         self.tlocal = None
@@ -273,10 +280,9 @@ class Frame(object):
             return -1
 
     def go(self, cmd_dict, timer=None):
-        # self.timer = Timer(1.0, self.execute_Frame)
-        # self.timer.start()
         self.cmds = cmd_dict
         self.cmds["Apps"][self.app._appname] = "Initializing"
+        self.timer = timer
         self.runner = TimerThread(self, Frame.Store, cmd_dict, timer)
         if self.process:
             self.thread = Process(target=self.runner.run)
@@ -304,8 +310,6 @@ class Frame(object):
         return (nobjects, size)
 
     def stop(self):
-        if self.timer:
-            self.timer.cancel()
         self.app.shutdown()
 
     def disable_subset(self, t):
@@ -377,9 +381,6 @@ class Frame(object):
             self.app.update()
             self.track_changes = False
             self.push()
-            if self.timer:
-                self.timer = Timer(1.0, self.execute_Frame)
-                self.timer.start()
             self.step += 1
             self.curtime = time.time()
         except:

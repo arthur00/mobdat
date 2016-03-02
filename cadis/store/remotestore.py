@@ -5,7 +5,6 @@ Created on Dec 14, 2015
 '''
 from copy import deepcopy
 import json, sys
-import pydevd
 import requests
 import time
 import urllib2
@@ -13,8 +12,7 @@ from uuid import uuid4, UUID
 
 from cadis.common.IStore import IStore
 from cadis.language import schema
-from cadis.language.schema import CADISEncoder
-from language.schema import CADIS
+from cadis.language.schema import CADIS, CADISEncoder
 import logging
 
 
@@ -90,7 +88,6 @@ class PythonRemoteStore(IStore):
         jsonlist = json.loads(resp.text)
         objlist = []
         for data in jsonlist:
-            pydevd.settrace()
             # obj = typeObj.__new__(typeObj)
             obj = CADIS()
             obj.__class__ = typeObj
