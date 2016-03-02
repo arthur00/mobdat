@@ -5,13 +5,13 @@
         "Interval" : 0.200,
         "SecondsPerStep" : 2.0,
         "StartTimeOfDay" : 7.0,
-        "MaximumTravelers" : 1600,
+        "MaximumTravelers" : 0,
 		"WorldInfoFile" : "worldinfo.js",
 		"MultiProcessing" : false,
 		"Timer" :
 		{
 			"Seconds" : 0,
-			"Minutes" : 1,
+			"Minutes" : 20,
 			"Hours" : 0
 		},
         "Connectors" : ["opensim", "sumo", "social"]
