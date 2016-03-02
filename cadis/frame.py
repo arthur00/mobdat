@@ -83,6 +83,7 @@ class TimerThread(object) :
             # save start time, for checking when the application should be stopped
             self.exec_start = datetime.datetime.now()
 
+        strtime = time.strftime("%Y-%m-%d_%H-%M-%S")
         if DEBUG:
             if not os.path.exists('stats'):
                 os.mkdir('stats')
@@ -93,7 +94,6 @@ class TimerThread(object) :
         if INSTRUMENT:
             if not os.path.exists('stats'):
                 os.mkdir('stats')
-            strtime = time.strftime("%Y-%m-%d_%H-%M-%S")
             self.ifname = os.path.join('stats', "%s_frame_%s.csv" % (strtime, self.appname))
             if platform.system() != "Windows":
                 linkname = os.path.join('stats', "latest_%s" % self.appname)
@@ -162,7 +162,7 @@ class TimerThread(object) :
             if DEBUG:
                 self.profile.disable()
                 self.profile.create_stats()
-                self.profile.dump_stats(os.path.join('stats', "%s_stats.ps" % self.appname))
+                self.profile.dump_stats(os.path.join('stats', "%s_stats_%s.ps" % (strtime, self.appname)))
 
         # compute a few stats
         elapsed = self.Clock() - starttime
