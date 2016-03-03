@@ -185,12 +185,14 @@ class MobdatController(cmd.Cmd) :
     pformat = 'mobdat [{0}]> '
 
     # -----------------------------------------------------------------
-    def __init__(self, evrouter, logger) :
+    def __init__(self, evrouter, logger, autostart) :
         cmd.Cmd.__init__(self)
 
         self.prompt = self.pformat.format(CurrentIteration)
         self.EventRouter = evrouter
         self.__Logger = logger
+        if autostart:
+            self.do_start(None)
 
     # -----------------------------------------------------------------
     def postcmd(self, flag, line) :
@@ -253,6 +255,7 @@ def Controller(settings) :
     logger.info('loading world data from %s',infofile)
     world = WorldInfo.WorldInfo.LoadFromFile(infofile)
     process = settings["General"].get("MultiProcessing", False)
+    autostart = settings["General"].get("AutoStart", False)
 
     cnames = settings["General"].get("Connectors",['sumo', 'opensim', 'social', 'stats'])
     #if 'opensim' in cnames:
@@ -286,7 +289,7 @@ def Controller(settings) :
     thread = TimerThread(evrouter, settings)
     thread.start()
 
-    controller = MobdatController(evrouter, logger)
+    controller = MobdatController(evrouter, logger, autostart)
     controller.cmdloop()
 
     del world

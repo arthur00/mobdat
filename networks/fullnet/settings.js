@@ -6,6 +6,7 @@
         "SecondsPerStep" : 2.0,
         "StartTimeOfDay" : 7.0,
         "MaximumTravelers" : 0,
+        "AutoStart" : false,
 		"WorldInfoFile" : "worldinfo.js",
 		"MultiProcessing" : false,
 		"Timer" :
@@ -26,7 +27,7 @@
     {
         "WaitMean" : 1000.0,
         "WaitSigma" : 200.0,
-        "PeopleCount" : 120
+        "PeopleCount" : 360
     },
 
     "OpenSimConnector" :

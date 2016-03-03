@@ -138,6 +138,9 @@ def Controller(settings, pushlist) :
         if partial_save and os.path.isfile(partial_save):
             os.remove(partial_save)
 
+    if not pushlist:
+        pushlist = ["opensim", "sumo"]
+
     for push in pushlist :
         if push == 'opensim' :
             logger.info("building opensim")
