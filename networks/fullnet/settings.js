@@ -5,15 +5,15 @@
         "Interval" : 0.200,
         "SecondsPerStep" : 2.0,
         "StartTimeOfDay" : 7.0,
-        "MaximumTravelers" : 1600,
+        "MaximumTravelers" : 0,
 		"WorldInfoFile" : "worldinfo.js",
 		"Data" : "jsondata",
-		"Store" : "SimpleStore",
-		"MultiProcessing" : false,
+		"Store" : "RemoteStore",
+		"MultiProcessing" : true,
 		"Timer" :
 		{
 			"Seconds" : 0,
-			"Minutes" : 1,
+			"Minutes" : 20,
 			"Hours" : 0
 		},
         "Connectors" : ["social", "sumo", "opensim"]

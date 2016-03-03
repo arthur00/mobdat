@@ -3,7 +3,7 @@ Created on Feb 19, 2016
 
 @author: arthurvaladares
 '''
-from _pydev_imps._pydev_uuid_old import uuid4
+from uuid import uuid4
 from django.utils.unittest.compatibility import wraps
 from flask import Flask, request
 from flask.helpers import make_response
