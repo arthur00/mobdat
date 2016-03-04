@@ -71,7 +71,8 @@ class TimerThread(object) :
         # Wait for the signal to start the simulation, this allows all of the
         # connectors to initialize
         self.frame.initialize_app()
-        self.cmds["Apps"][self.appname] = "Ready"
+        self.frame._update_shared_status("Ready")
+        self.__Logger.warn("Application %s ready to start.", self.appname)
         while not self.cmds["SimulatorStartup"]:
             time.sleep(5.0)
         maxt = None
@@ -263,25 +264,83 @@ class Frame(object):
             logger.debug("%s received store %s", LOG_HEADER, store)
             Frame.Store = store
 
+    ######################################################
+    ## Application -> Frame Functions
+    ######################################################
+    def add(self, obj):
+        t = obj.__class__
+        if t in self.storebuffer:
+            # logger.debug("%s Creating new object %s.%s", LOG_HEADER, obj.__class__, obj._primarykey)
+            if obj._primarykey == None:
+                obj._primarykey = uuid.uuid4()
+            obj._frame = self
+            self.newlyproduced[t][obj._primarykey] = obj
+            self.storebuffer[t][obj._primarykey] = obj
+            # If we removed then readded in the same tick, make sure we don't send the remove anymore
+            if t in self.deletelist and obj._primarykey in self.deletelist[t]:
+                del self.deletelist[t][obj._primarykey]
+        else:
+            logger.error("%s Object not in dictionary: %s", LOG_HEADER, obj.__class__)
+
+    def delete(self, t, oid):
+        if oid in self.storebuffer[t]:
+            o = self.storebuffer[t][oid]
+            self.deletelist[t][o._primarykey] = o
+            del self.storebuffer[t][oid]
+            # If we added and removed in the same tick, make sure we don't send the add
+            if t in self.newlyproduced and o._primarykey in self.newlyproduced[t]:
+                del self.newlyproduced[t][o._primarykey]
+
+        else:
+            logger.warn("could not find object %s in storebuffer")
+        return True
+
+    def get(self, t, primkey=None):
+        self.track_changes = False
+        try:
+            if t not in self.storebuffer:
+                self.__Logger.error("Could not find type %s in cache. Did you remember to add it as a gettter, setter, or producer in the simulator?")
+                sys.exit(0)
+            if primkey != None:
+                obj = self.storebuffer[t][primkey]
+                if hasattr(t, '_foreignkeys'):
+                    self._resolve_fk(obj, t)
+                return obj
+            else:
+                res = []
+                for obj in self.storebuffer[t].values():
+                    res.append(self.get(t, obj._primarykey))
+                return res
+        except:
+            self.__Logger.exception("Uncaught exception in Frame.Get")
+            raise
+        finally:
+            self.track_changes = True
+
+
+    def new(self, t):
+        return self.new_storebuffer[t].values()
+
+    def deleted(self, t):
+        return self.del_storebuffer[t].values()
+
+    def changed(self, t):
+        return self.mod_storebuffer[t].values()
+
+    def disable_subset(self, t):
+        self.subset_disable.add(t)
+
+    def enable_subset(self, t):
+        if t in self.subset_disable:
+            self.subset_disable.remove(t)
+
     def attach(self, app):
         self.app = app
         self.process_declarations(app)
         #self.app.initialize()
 
-    def name2class(self, typeName):
-        for t in self.storebuffer:
-            if t.__name__ == typeName:
-                return t
-
-    def count(self, typeObj):
-        if typeObj in self.storebuffer:
-            return len(self.storebuffer[typeObj])
-        else:
-            return -1
-
     def go(self, cmd_dict, timer=None):
         self.cmds = cmd_dict
-        self.cmds["Apps"][self.app._appname] = "Initializing"
         self.timer = timer
         self.runner = TimerThread(self, Frame.Store, cmd_dict, timer)
         if self.process:
@@ -290,34 +349,40 @@ class Frame(object):
             self.thread = Thread(target=self.runner.run)
         self.thread.start()
 
+
+    ######################################################
+    ## Core Functions
+    ######################################################
+    def execute_Frame(self):
+        try:
+            self.pull()
+            self.track_changes = True
+            self.app.update()
+            self.track_changes = False
+            self.push()
+            self.step += 1
+            self.curtime = time.time()
+        except:
+            self.cmds["SimulatorPaused"] = True
+            logger.exception("[%s] uncaught exception: ", self.app.__module__)
+
     def initialize_app(self):
         self.app.initialize()
         # Push initial objects the application has added.
         self.push()
+        self._update_shared_status("Pushed")
+        logger.warn("Application %s finished pushing", self.app._appname)
+        it = 0
+        done = False
+        while(it < 300 and done == False and self.cmds["SimulatorShutdown"] == False):
+            done = True
+            for status in self._get_all_status().values():
+                if status != "Pushed":
+                    done = False
+                    break
+            it += 1
+            time.sleep(0.1)
         self.pull()
-
-    def join(self):
-        self.thread.join()
-
-    def buffersize(self):
-        size = 0
-        nobjects = 0
-        for t in self.storebuffer:
-            for o in self.storebuffer[t].values():
-                nobjects += 1
-                for prop in o._dimensions:
-                    size += sys.getsizeof(prop)
-        return (nobjects, size)
-
-    def stop(self):
-        self.app.shutdown()
-
-    def disable_subset(self, t):
-        self.subset_disable.add(t)
-
-    def enable_subset(self, t):
-        if t in self.subset_disable:
-            self.subset_disable.remove(t)
 
     def process_declarations(self, app):
         self.produced = app._producer
@@ -374,30 +439,15 @@ class Frame(object):
         setattr(self.app, "_appname", self.app.__class__.__name__)
         Frame.Store.register(self.app._appname)
 
-    def execute_Frame(self):
-        try:
-            self.pull()
-            self.track_changes = True
-            self.app.update()
-            self.track_changes = False
-            self.push()
-            self.step += 1
-            self.curtime = time.time()
-        except:
-            self.cmds["SimulatorPaused"] = True
-            logger.exception("[%s] uncaught exception: ", self.app.__module__)
+    #def join(self):
+    #    self.thread.join()
 
-    def _fkobj(self, o):
-        for propname in self.fkdict[o.__class__].keys():
-            propvalue = getattr(o, propname)
-            self.fkdict[o.__class__][propname][propvalue] = o.ID
+    def stop(self):
+        self.app.shutdown()
 
-    def _delfkobj(self, o):
-        for propname in self.fkdict[o.__class__].keys():
-            propvalue = getattr(o, propname)
-            if propvalue in self.fkdict[o.__class__][propname]:
-                del self.fkdict[o.__class__][propname][propvalue]
-
+    ######################################################
+    ## Frame -> Store Functions
+    ######################################################
     @instrument
     def pull(self):
         tmpbuffer = {}
@@ -521,6 +571,56 @@ class Frame(object):
         Frame.Store.update_all(self.pushlist, self.app._appname)
         # self.pushlist[t] = {}
 
+    ######################################################
+    ## Utility Functions
+    ######################################################
+    def buffersize(self):
+        size = 0
+        nobjects = 0
+        for t in self.storebuffer:
+            for o in self.storebuffer[t].values():
+                nobjects += 1
+                for prop in o._dimensions:
+                    size += sys.getsizeof(prop)
+        return (nobjects, size)
+
+    def _fkobj(self, o):
+        for propname in self.fkdict[o.__class__].keys():
+            propvalue = getattr(o, propname)
+            self.fkdict[o.__class__][propname][propvalue] = o.ID
+
+    def _delfkobj(self, o):
+        for propname in self.fkdict[o.__class__].keys():
+            propvalue = getattr(o, propname)
+            if propvalue in self.fkdict[o.__class__][propname]:
+                del self.fkdict[o.__class__][propname][propvalue]
+
+    def name2class(self, typeName):
+        for t in self.storebuffer:
+            if t.__name__ == typeName:
+                return t
+
+    def count(self, typeObj):
+        if typeObj in self.storebuffer:
+            return len(self.storebuffer[typeObj])
+        else:
+            return -1
+
+    def _update_shared_status(self, newstatus):
+        self.cmds["APP_" + self.app._appname] = newstatus
+
+    def _get_all_shared_statuses(self):
+        res = {}
+        for k,v in self.cmds.items():
+            if k.startswith("APP_"):
+                res[k] = v
+        return res
+
+    def findproperty(self, t, propname, value):
+        for o in self.storebuffer[t].values():
+            if getattr(o, propname) == value:
+                return o
+        return None
 
     def set_property(self, t, o, v, n):
         # Newly produced items will be pushed entirely. Skip...
@@ -544,40 +644,6 @@ class Frame(object):
         self.pushlist[t][o._primarykey][n] = v
         # logger.debug("property %s of object %s (ID %s) set to %s", n, o, o._primarykey, v)
 
-    def add(self, obj):
-        t = obj.__class__
-        if t in self.storebuffer:
-            # logger.debug("%s Creating new object %s.%s", LOG_HEADER, obj.__class__, obj._primarykey)
-            if obj._primarykey == None:
-                obj._primarykey = uuid.uuid4()
-            obj._frame = self
-            self.newlyproduced[t][obj._primarykey] = obj
-            self.storebuffer[t][obj._primarykey] = obj
-            # If we removed then readded in the same tick, make sure we don't send the remove anymore
-            if t in self.deletelist and obj._primarykey in self.deletelist[t]:
-                del self.deletelist[t][obj._primarykey]
-        else:
-            logger.error("%s Object not in dictionary: %s", LOG_HEADER, obj.__class__)
-
-    def delete(self, t, oid):
-        if oid in self.storebuffer[t]:
-            o = self.storebuffer[t][oid]
-            self.deletelist[t][o._primarykey] = o
-            del self.storebuffer[t][oid]
-            # If we added and removed in the same tick, make sure we don't send the add
-            if t in self.newlyproduced and o._primarykey in self.newlyproduced[t]:
-                del self.newlyproduced[t][o._primarykey]
-
-        else:
-            logger.warn("could not find object %s in storebuffer")
-        return True
-
-    def findproperty(self, t, propname, value):
-        for o in self.storebuffer[t].values():
-            if getattr(o, propname) == value:
-                return o
-        return None
-
     def _resolve_fk(self, obj, t):
         for propname, cls in t._foreignkeys.items():
             propvalue = getattr(obj, propname)
@@ -600,37 +666,6 @@ class Frame(object):
                         setattr(obj, propname, o)
 
 
-    def get(self, t, primkey=None):
-        self.track_changes = False
-        try:
-            if t not in self.storebuffer:
-                self.__Logger.error("Could not find type %s in cache. Did you remember to add it as a gettter, setter, or producer in the simulator?")
-                sys.exit(0)
-            if primkey != None:
-                obj = self.storebuffer[t][primkey]
-                if hasattr(t, '_foreignkeys'):
-                    self._resolve_fk(obj, t)
-                return obj
-            else:
-                res = []
-                for obj in self.storebuffer[t].values():
-                    res.append(self.get(t, obj._primarykey))
-                return res
-        except:
-            self.__Logger.exception("Uncaught exception in Frame.Get")
-            raise
-        finally:
-            self.track_changes = True
-
-
-    def new(self, t):
-        return self.new_storebuffer[t].values()
-
-    def deleted(self, t):
-        return self.del_storebuffer[t].values()
-
-    def changed(self, t):
-        return self.mod_storebuffer[t].values()
 
     def __deepcopy__(self, memo):
         return self

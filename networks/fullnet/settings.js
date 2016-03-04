@@ -9,6 +9,7 @@
 		"WorldInfoFile" : "worldinfo.js",
 		"Data" : "jsondata",
 		"Store" : "RemoteStore",
+		"AutoStart" : "true",
 		"MultiProcessing" : true,
 		"Timer" :
 		{

@@ -305,7 +305,7 @@ class SumoConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
         self.XSize = self.SimulationBoundary[1][0] - self.XBase
         self.YBase = self.SimulationBoundary[0][1]
         self.YSize = self.SimulationBoundary[1][1] - self.YBase
-        self.__Logger.warn("starting sumo connector")
+        #self.__Logger.warn("starting sumo connector")
 
         # initialize the edge list, drop all the internal edges
         self.EdgeList = []

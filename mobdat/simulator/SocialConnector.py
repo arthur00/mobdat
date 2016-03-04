@@ -45,7 +45,7 @@ from mobdat.simulator.DataModel import Vehicle, Person, BusinessNode,\
 from cadis.common.IFramed import Producer, GetterSetter
 from cadis.common import IFramed
 import json
-from uuid import UUID
+from uuid import UUID, uuid4
 from cadis.frame import instrument
 
 sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
@@ -78,7 +78,7 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
         self.CreateTravelers()
 
         self.AddBuildings()
-        self.__Logger.warn('SocialConnector initialization complete')
+        #self.__Logger.warn('SocialConnector initialization complete')
 
     # -----------------------------------------------------------------
     def AddTripToEventQueue(self, trip) :
@@ -228,10 +228,7 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
                 else:
                     prop = data[dim._name]
                 setattr(obj, dim._name, prop)
-            if "ID" in data:
-                obj.ID = UUID(data["ID"])
-            else:
-                obj.ID = None
+            obj.ID = uuid4()
             objlist.append(obj)
         return objlist
 
@@ -297,7 +294,7 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
         #self.SubscribeEvent(EventTypes.EventDeleteObject, self.HandleDeleteObjectEvent)
         #self.SubscribeEvent(EventTypes.TimerEvent, self.HandleTimerEvent)
         #self.SubscribeEvent(EventTypes.ShutdownEvent, self.HandleShutdownEvent)
-        self.__Logger.info("Simulation started!")
+        #self.__Logger.info("Simulation started!")
         # all set... time to get to work!
         #self.HandleEvents()
 

@@ -85,17 +85,21 @@ class MobdatController(cmd.Cmd) :
     pformat = 'mobdat [{0}]> '
 
     # -----------------------------------------------------------------
-    def __init__(self, logger, connectors, cmd_dict) :
+    def __init__(self, logger, connectors, cmd_dict, autostart) :
         cmd.Cmd.__init__(self)
         self.connectors = connectors
         self.prompt = self.pformat.format(CurrentIteration)
         self.__Logger = logger
         self.cmds = cmd_dict
+        self.autostart = autostart
 
     # -----------------------------------------------------------------
     def postcmd(self, flag, line) :
         self.prompt = self.pformat.format(CurrentIteration)
         return flag
+
+    def preloop(self):
+        self.onecmd("start")
 
     # -----------------------------------------------------------------
     def do_stopat(self, args) :
@@ -109,21 +113,26 @@ class MobdatController(cmd.Cmd) :
         except :
             print 'Unable to parse input parameter %s' % args
 
+    def do_forcestart(self, args):
+        self.cmds["SimulatorStartup"] = True
+
     # -----------------------------------------------------------------
     def do_start(self, args) :
         """start
         Start the simulation after all connectors are initialized
         """
+        self.ready = False
+        while(not self.ready and self.cmds["SimulatorStartup"] == False):
+            self.ready = True
+            for k,v in self.cmds.items():
+                if k.startswith("APP_"):
+                    if v != "Ready":
+                        self.__Logger.warn("Application %s not ready yet. Retrying in 5 seconds..", k)
+                        self.ready = False
+            if not self.ready:
+                self.__Logger.warn("## Sleeping 5 seconds ##\n")
+                time.sleep(5)
         self.__Logger.warn("starting the timer loop")
-        ready = False
-        while(not ready):
-            ready = True
-            for k,v in self.cmds["Apps"].items():
-                if v != "Ready":
-                    print "Application %s not ready yet." % k
-                    ready = False
-            if not ready:
-                time.sleep(1)
         self.cmds["SimulatorStartup"] = True
 
     def do_pause(self, args) :
@@ -182,6 +191,7 @@ def Controller(settings) :
     store_type = settings["General"].get("Store", "SimpleStore")
     process = settings["General"].get("MultiProcessing", False)
     timer = settings["General"].get("Timer", None)
+    autostart = settings["General"].get("AutoStart", False)
     if timer:
         seconds = 0
         minutes = 0
@@ -199,10 +209,9 @@ def Controller(settings) :
     if store_type == "RemoteStore":
         manager = Manager()
         cmd_dict = manager.dict()
-        cmd_dict["Apps"] = manager.dict()
     else:
         cmd_dict = {}
-        cmd_dict["Apps"] = {}
+
     cmd_dict["SimulatorStartup"] = False
     cmd_dict["SimulatorShutdown"] = False
     cmd_dict["SimulatorPaused"] = False
@@ -224,12 +233,13 @@ def Controller(settings) :
             continue
 
         cframe = Frame(Store(), process, settings)
+        cmd_dict["APP_" + _SimulationControllers[cname].__name__] = "Initializing"
         connector = _SimulationControllers[cname](settings, world, laysettings, cname, cframe)
         cframe.attach(connector)
         connectors.append(cframe)
         cframe.go(cmd_dict, timer)
 
-    controller = MobdatController(logger, connectors, cmd_dict)
+    controller = MobdatController(logger, connectors, cmd_dict, autostart)
     controller.cmdloop()
 
     for connproc in connectors :

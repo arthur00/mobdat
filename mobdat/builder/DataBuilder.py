@@ -215,7 +215,7 @@ class DataBuilder :
         person = Person()
         person.Vehicle = VehicleInfo(node.Vehicle.VehicleName, node.Vehicle.VehicleType)
         jobd = node.JobDescription.JobDescription
-        person.JobDescription = JobDescription(jobd.Salary, jobd.FlexibleHours, jobd.Schedule)
+        person.JobDescription = JobDescription(jobd.Salary, jobd.FlexibleHours, jobd.Schedule.__dict__)
         person.Preference = node.Preference.PreferenceMap
         person.Name = name
         if name in self.livesat:

@@ -1,9 +1,9 @@
+#!/usr/bin/python
 '''
 Created on Feb 19, 2016
 
 @author: arthurvaladares
 '''
-from uuid import uuid4
 from django.utils.unittest.compatibility import wraps
 from flask import Flask, request
 from flask.helpers import make_response
@@ -12,7 +12,12 @@ import json
 import logging, logging.handlers
 import new
 import os
+import os
+import sys
 from uuid import UUID
+from uuid import uuid4
+
+sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
 
 from cadis.language.schema import CADISEncoder, CADIS
 from cadis.store.simplestore import SimpleStore
