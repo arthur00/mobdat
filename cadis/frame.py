@@ -349,6 +349,8 @@ class Frame(object):
             self.thread = Thread(target=self.runner.run)
         self.thread.start()
 
+    def join(self):
+        self.thread.join()
 
     ######################################################
     ## Core Functions
@@ -376,7 +378,7 @@ class Frame(object):
         done = False
         while(it < 300 and done == False and self.cmds["SimulatorShutdown"] == False):
             done = True
-            for status in self._get_all_status().values():
+            for status in self._get_all_shared_statuses().values():
                 if status != "Pushed":
                     done = False
                     break
@@ -438,9 +440,6 @@ class Frame(object):
                 Frame.Store = SimpleStore()
         setattr(self.app, "_appname", self.app.__class__.__name__)
         Frame.Store.register(self.app._appname)
-
-    #def join(self):
-    #    self.thread.join()
 
     def stop(self):
         self.app.shutdown()

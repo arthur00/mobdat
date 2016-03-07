@@ -54,6 +54,7 @@ from mobdat.common import LayoutSettings, WorldInfo
 from mobdat.common.Utilities import AuthByUserName
 from prime import PrimeSimulator
 import datetime
+from threading import Thread
 
 
 sys.path.append(os.path.join(os.environ.get("OPENSIM", "/share/opensim"), "lib", "python"))
@@ -92,14 +93,35 @@ class MobdatController(cmd.Cmd) :
         self.__Logger = logger
         self.cmds = cmd_dict
         self.autostart = autostart
+        self.wait2start = False
+
+    def start_loop(self):
+        self.ready = False
+        while(not self.ready and self.cmds["SimulatorStartup"] == False):
+            self.ready = True
+            self.__Logger.warn("## Checking if all simulators are ready ##")
+            for k,v in self.cmds.items():
+                if k.startswith("APP_"):
+                    if v != "Ready":
+                        self.__Logger.warn("Application %s not ready yet. Retrying in 5 seconds..", k)
+                        self.ready = False
+            if not self.ready:
+                self.__Logger.warn("## Sleeping 5 seconds ##\n")
+                time.sleep(5)
+        self.__Logger.warn("## starting the timer loop ##")
+        self.cmds["SimulatorStartup"] = True
 
     # -----------------------------------------------------------------
     def postcmd(self, flag, line) :
         self.prompt = self.pformat.format(CurrentIteration)
         return flag
 
+    def emptyline(self):
+        pass
+
     def preloop(self):
-        self.onecmd("start")
+        if self.autostart:
+            self.onecmd("start")
 
     # -----------------------------------------------------------------
     def do_stopat(self, args) :
@@ -121,19 +143,11 @@ class MobdatController(cmd.Cmd) :
         """start
         Start the simulation after all connectors are initialized
         """
-        self.ready = False
-        while(not self.ready and self.cmds["SimulatorStartup"] == False):
-            self.ready = True
-            for k,v in self.cmds.items():
-                if k.startswith("APP_"):
-                    if v != "Ready":
-                        self.__Logger.warn("Application %s not ready yet. Retrying in 5 seconds..", k)
-                        self.ready = False
-            if not self.ready:
-                self.__Logger.warn("## Sleeping 5 seconds ##\n")
-                time.sleep(5)
-        self.__Logger.warn("starting the timer loop")
-        self.cmds["SimulatorStartup"] = True
+        if not self.wait2start:
+            Thread(target=self.start_loop).start()
+            self.wait2start = True
+        else:
+            self.__Logger.warn("Waiting for simulators to be ready. To force start, type \"forcestart\"")
 
     def do_pause(self, args) :
         """start

@@ -5,7 +5,7 @@
         "Interval" : 0.200,
         "SecondsPerStep" : 2.0,
         "StartTimeOfDay" : 7.0,
-        "MaximumTravelers" : 0,
+        "MaximumTravelers" : 5000,
 		"WorldInfoFile" : "worldinfo.js",
 		"Data" : "jsondata",
 		"Store" : "RemoteStore",
