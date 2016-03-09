@@ -16,11 +16,18 @@ import os
 import sys
 from uuid import UUID
 from uuid import uuid4
+import platform
+import time
+import csv
+from threading import Thread
 
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
 
+from mobdat.simulator.DataModel import Vehicle
+from cadis.common import util
+from cadis.common.util import Instrument
 from cadis.language.schema import CADISEncoder, CADIS
-from cadis.store.simplestore import SimpleStore
+from cadis.store.simplestore import SimpleStore, InstrumentedSimpleStore
 from mobdat.common.ValueTypes import Vector3
 from mobdat.simulator.DataModel import *
 from prime.PrimeDataModel import *
@@ -56,7 +63,6 @@ def handle_exceptions(f):
         return ret
     return wrapped
 
-
 def create_obj(typeObj, data):
     # obj = typeObj.__new__()
     obj = CADIS()
@@ -75,7 +81,7 @@ class GetUpdated(Resource):
     @handle_exceptions
     def get(self, sim, t):
         typeObj = FrameServer.name2class[t]
-        (new, updated, deleted) = FrameServer.Store.getupdated(typeObj, sim)
+        (new, updated, deleted) = FrameServer.Store.getupdated(typeObj, sim, copy_objs=False)
         ret = {}
         ret["new"] = new
         ret["updated"] = updated
@@ -86,7 +92,7 @@ class GetPushType(Resource):
     @handle_exceptions
     def get(self, sim, t):
         typeObj = FrameServer.name2class[t]
-        objs = FrameServer.Store.get(typeObj)
+        objs = FrameServer.Store.get(typeObj, False)
         return objs
 
     @handle_exceptions
@@ -158,9 +164,9 @@ class FrameServer(object):
     '''
     Store server for CADIS
     '''
-    Store = SimpleStore()
+    Store = InstrumentedSimpleStore()
     name2class = Store.name2class
-    def __init__(self):
+    def __init__(self, inst=False):
         # ## Test Code
         #         self.Store.register("TestSim")
         #         simnode = SimulationNode()
@@ -169,6 +175,13 @@ class FrameServer(object):
         #         self.Store.insert(simnode, "TestSim")
         # ##
         SetupLoggers()
+
+        if inst:
+            headers = ['vehicles']
+            headers.extend(FrameServer.Store.instruments.keys())
+            self.benchmark = Instrument('frameserver', headers)
+            Thread(target=WriteInstruments, args=(self.benchmark,)).start()
+
         self.app = app
         self.api = api
         FrameServer.api = self.api
@@ -178,6 +191,14 @@ class FrameServer(object):
         self.api.add_resource(Register, '/<string:sim>')
         self.app.run(port=12000, debug=False)
 
+def WriteInstruments(benchmark):
+    while (True):
+        time.sleep(1)
+        instruments = FrameServer.Store.collect_instruments()
+        instruments['vehicles'] = FrameServer.Store.count(Vehicle)
+        benchmark.add_instruments(instruments)
+        benchmark.dump_stats()
+
 
 if __name__ == "__main__":
-    FrameServer()
+    FrameServer(True)

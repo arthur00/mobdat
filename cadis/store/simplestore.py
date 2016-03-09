@@ -14,7 +14,8 @@ from cadis.common.IStore import IStore
 from cadis.language import schema
 from cadis.language.schema import StorageObjectFactory, \
     PermutationObjectfactory, permutationsets, subsets
-
+import time
+from cadis.common import util
 
 class SubSetFrameUpdate(object):
     def __init__(self, t, store):
@@ -84,7 +85,7 @@ class FrameUpdate(object):
             self.updated.remove(primkey)
         self.deleted.add(primkey)
 
-    def updatelist(self, clear=False):
+    def updatelist(self, clear=False, copy_objs=True):
         cp_added = copy(self.added)
         cp_updated = copy(self.updated)
         cp_deleted = copy(self.deleted)
@@ -101,14 +102,20 @@ class FrameUpdate(object):
             if key in self.storageobj:
                 added.append(PermutationObjectfactory(self.store[self.objtype][key]))
             else:
-                added.append(deepcopy(self.store[self.objtype][key]))
+                if copy_objs:
+                    added.append(deepcopy(self.store[self.objtype][key]))
+                else:
+                    added.append(self.store[self.objtype][key])
         for key in cp_updated:
             if key not in self.store[self.objtype]:
                 continue
             if key in self.storageobj:
                 updated.append(PermutationObjectfactory(self.store[self.objtype][key]))
             else:
-                updated.append(deepcopy(self.store[self.objtype][key]))
+                if copy_objs:
+                    updated.append(deepcopy(self.store[self.objtype][key]))
+                else:
+                    updated.append(self.store[self.objtype][key])
         for key in cp_deleted:
             deleted.append(key)
 
@@ -260,7 +267,7 @@ class SimpleStore(IStore):
         for t in pushlist.keys():
             self.update(t, pushlist[t], sim)
 
-    def get(self, typeObj, copy=True):
+    def get(self, typeObj, copy_objs=True):
         with self.lock:
             if typeObj in self.store:
                 if typeObj in permutationsets:
@@ -270,14 +277,19 @@ class SimpleStore(IStore):
                     # self.__Logger.warn("Retrieving permuted sets not yet implemented.")
                     return res
                 else:
-                    if copy:
-                        return deepcopy(self.store[typeObj].values())
+                    if copy_objs:
+                        ret = []
+                        for obj in self.store[typeObj].values():
+                            ret.append(copy(obj))
+                        return ret
                     else:
                         return self.store[typeObj].values()
             elif typeObj in self.subsets:
-                res = deepcopy(typeObj.query(self))
-                for o in res:
-                    o.__class__ = typeObj
+                if hasattr(self, "instruments"):
+                    header = 'query_%s' % typeObj._FULLNAME
+                    res = self.measure_function(typeObj.query, [self], header)
+                else:
+                    res = typeObj.query(self)
                 return res
             else:
                 self.__Logger.error("ERROR! Object type supposed to exist as a set or subset")
@@ -289,15 +301,17 @@ class SimpleStore(IStore):
         else:
             self.__Logger.error("Could not find key %s for object type %s", key, typeObj)
 
-    def getupdated(self, typeObj, sim):
+    def getupdated(self, typeObj, sim, copy_objs=True):
         with self.lock:
             if typeObj in self.subsets:
-                res = typeObj.query(self)
-                # for o in res:
-                #    o.__class__ = typeObj
+                if hasattr(self, "instruments"):
+                    header = 'query_%s' % typeObj._FULLNAME
+                    res = self.measure_function(typeObj.query, [self], header)
+                else:
+                    res = typeObj.query(self)
                 return self.updates4sim[sim][typeObj].get_update(res)
             else:
-                return self.updates4sim[sim][typeObj].updatelist(True)
+                return self.updates4sim[sim][typeObj].updatelist(clear=True, copy_objs=copy_objs)
 
     def delete(self, typeObj, primkey, sim):
         with self.lock:
@@ -310,5 +324,58 @@ class SimpleStore(IStore):
             else:
                 self.__Logger.debug("deleted object type %s ID %s missing from store", typeObj, primkey)
 
+    def count(self, typeObj):
+        return len(self.store[typeObj])
+
     def close(self):
         return
+
+class InstrumentedSimpleStore(SimpleStore):
+    def __init__(self):
+        self.instruments = {}
+        super(InstrumentedSimpleStore, self).__init__()
+        for ss in self.subsets:
+            self.instruments['query_%s' % ss._FULLNAME] = []
+            self.instruments['get_%s' % ss._FULLNAME] = []
+            self.instruments['getupdated_%s' % ss._FULLNAME] = []
+        for t in self.store:
+            self.instruments['get_%s' % t._FULLNAME] = []
+            self.instruments['getupdated_%s' % t._FULLNAME] = []
+
+    def get(self, typeObj, copy_objs=True):
+        start = time.time()
+        ret = super(InstrumentedSimpleStore, self).get(typeObj, copy_objs=True)
+        end = time.time()
+        header = 'get_%s' % typeObj._FULLNAME
+        if self.instruments[header] == "":
+            self.instruments[header] = []
+        self.instruments[header].append((end-start) * 1000)
+        return ret
+
+    def getupdated(self, typeObj, sim, copy_objs=True):
+        start = time.time()
+        ret = super(InstrumentedSimpleStore, self).getupdated(typeObj, sim, copy_objs)
+        end = time.time()
+        header = 'getupdated_%s' % typeObj._FULLNAME
+        if self.instruments[header] == "":
+            self.instruments[header] = []
+        self.instruments[header].append((end-start) * 1000)
+        return ret
+
+    def measure_function(self, f, args, header, average=True):
+        start = time.time()
+        ret = f(*args)
+        end = time.time()
+        if average and self.instruments[header] == "":
+            self.instruments[header] = []
+            self.instruments[header].append((end - start) * 1000)
+        else:
+            if self.instruments[header] == "":
+                self.instruments[header] = 0
+            self.instruments[header].append((end - start) * 1000)
+        return ret
+    def collect_instruments(self):
+        insts = copy(self.instruments)
+        for h in self.instruments:
+            self.instruments[h] = ""
+        return insts
