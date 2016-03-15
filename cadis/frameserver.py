@@ -20,6 +20,9 @@ import platform
 import time
 import csv
 from threading import Thread
+import cProfile
+from flask import request
+import signal
 
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -51,6 +54,13 @@ app.config.from_object(FlaskConfig)
 # app.json_encoder = CADISEncoder()
 FlaskConfig.init_app(app)
 api = Api(app)
+
+def signal_handler(signal, frame):
+    print('You pressed Ctrl+C!')
+    server.shutdown()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
 
 def handle_exceptions(f):
     @wraps(f)
@@ -166,7 +176,9 @@ class FrameServer(object):
     '''
     Store = InstrumentedSimpleStore()
     name2class = Store.name2class
-    def __init__(self, inst=False):
+    Shutdown = False
+    def __init__(self, inst=False, profiling=False):
+        global server
         # ## Test Code
         #         self.Store.register("TestSim")
         #         simnode = SimulationNode()
@@ -175,30 +187,45 @@ class FrameServer(object):
         #         self.Store.insert(simnode, "TestSim")
         # ##
         SetupLoggers()
-
+        self.profiling = profiling
         if inst:
             headers = ['vehicles']
             headers.extend(FrameServer.Store.instruments.keys())
             self.benchmark = Instrument('frameserver', headers)
             Thread(target=WriteInstruments, args=(self.benchmark,)).start()
 
+        if profiling:
+            if not os.path.exists('stats'):
+                os.mkdir('stats')
+            self.profile = cProfile.Profile()
+            self.profile.enable()
+            print "starting profiler"
         self.app = app
         self.api = api
+        FrameServer.app = app
         FrameServer.api = self.api
         self.api.add_resource(GetInsertDeleteObject, '/<string:sim>/<string:t>/<string:uid>')
         self.api.add_resource(GetPushType, '/<string:sim>/<string:t>')
         self.api.add_resource(GetUpdated, '/<string:sim>/updated/<string:t>')
         self.api.add_resource(Register, '/<string:sim>')
+        server = self
         self.app.run(port=12000, debug=False)
 
+    def shutdown(self):
+        if self.profiling:
+            strtime = time.strftime("%Y-%m-%d_%H-%M-%S")
+            self.profile.disable()
+            self.profile.create_stats()
+            self.profile.dump_stats(os.path.join('stats', "%s_frameserver.ps" % (strtime)))
+        FrameServer.Shutdown = True
+
 def WriteInstruments(benchmark):
-    while (True):
+    while (not FrameServer.Shutdown):
         time.sleep(1)
         instruments = FrameServer.Store.collect_instruments()
         instruments['vehicles'] = FrameServer.Store.count(Vehicle)
         benchmark.add_instruments(instruments)
         benchmark.dump_stats()
 
-
 if __name__ == "__main__":
-    FrameServer(True)
+    FrameServer(True, True)
