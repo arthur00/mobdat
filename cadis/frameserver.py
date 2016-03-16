@@ -22,6 +22,7 @@ import csv
 from threading import Thread
 import cProfile
 from flask import request
+import datetime
 import signal
 
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
@@ -189,9 +190,10 @@ class FrameServer(object):
         SetupLoggers()
         self.profiling = profiling
         if inst:
-            headers = ['vehicles']
+            headers = ['time', 'vehicles']
             headers.extend(FrameServer.Store.instruments.keys())
             self.benchmark = Instrument('frameserver', headers)
+            self.benchmark.exec_start = datetime.datetime.now()
             Thread(target=WriteInstruments, args=(self.benchmark,)).start()
 
         if profiling:
@@ -223,6 +225,7 @@ def WriteInstruments(benchmark):
     while (not FrameServer.Shutdown):
         time.sleep(1)
         instruments = FrameServer.Store.collect_instruments()
+        instruments['time'] = str(datetime.datetime.now() - benchmark.exec_start)
         instruments['vehicles'] = FrameServer.Store.count(Vehicle)
         benchmark.add_instruments(instruments)
         benchmark.dump_stats()

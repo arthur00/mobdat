@@ -107,7 +107,7 @@ class TimerThread(object) :
                               (self.frame.process, maxt, self.IntervalTime, self.timer, type(Frame.Store).__name__))
                 csvfile.write("########\n\n")
                 # Base headers
-                headers = ['delta', 'nobjects', 'mem buffer', 'vehicles']
+                headers = ['time', 'delta', 'nobjects', 'mem buffer', 'vehicles']
                 # Annotated headers
                 headers.extend(INSTRUMENT_HEADERS[self.frame.__module__])
                 headers.extend(INSTRUMENT_HEADERS[self.frame.app.__module__])
@@ -141,6 +141,7 @@ class TimerThread(object) :
                     # csv.writer(["%.3f" % delta].append(self.inst_array))
                         writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
                         d = self.frame._instruments
+                        d['time'] = str(datetime.datetime.now() - self.exec_start)
                         d['delta'] = delta_secs * 1000
                         d['vehicles'] = self.frame.count(self.frame.name2class("Vehicle"))
                         if self.CurrentIteration % 10 == 0:
