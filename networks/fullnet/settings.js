@@ -5,8 +5,8 @@
         "Interval" : 0.200,
         "SecondsPerStep" : 2.0,
         "StartTimeOfDay" : 7.0,
-        "MaximumTravelers" : 0,
-        "AutoStart" : false,
+        "MaximumTravelers" : 5000,
+        "AutoStart" : true,
 		"WorldInfoFile" : "worldinfo.js",
 		"MultiProcessing" : false,
 		"Timer" :

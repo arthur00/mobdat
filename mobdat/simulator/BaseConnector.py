@@ -44,6 +44,7 @@ import csv
 from functools import wraps
 from mobdat.simulator import EventTypes
 from mobdat.simulator.Controller import INSTRUMENT, INSTRUMENT_HEADERS
+import datetime
 
 sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
@@ -116,7 +117,7 @@ class BaseConnector :
                 csvfile.write("Options, MultiProcessing : %s, MaximumTravelers : %s, Interval : %s, Timer: %s\n" % (process, maxt, self.Interval, timer))
                 csvfile.write("########\n\n")
                 # Base headers
-                headers = ['step', 'vehicles', 'HandleEvent']
+                headers = ['time', 'step', 'vehicles', 'HandleEvent']
                 # Annotated headers
                 if self.__module__ in INSTRUMENT_HEADERS:
                     headers.extend(INSTRUMENT_HEADERS[self.__module__])
@@ -124,6 +125,7 @@ class BaseConnector :
                 self.fieldnames = headers
                 writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
                 writer.writeheader()
+                self.exec_start = None
             self.SubscribeEvent(EventTypes.InstrumentEvent, self.HandleInstrumentation)
 
         # Save network information
@@ -164,6 +166,9 @@ class BaseConnector :
             #csv.writer(["%.3f" % delta].append(self.inst_array))
                 writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
                 d = self._instruments
+                if not self.exec_start:
+                    self.exec_start = datetime.datetime.now()
+                d['time'] = str(datetime.datetime.now() - self.exec_start)
                 d['step'] = event.Step
                 d['vehicles'] = self.vehicle_count
                 #if self.CurrentIteration % 10 == 0:
