@@ -2,9 +2,9 @@
 '''
 Created on Feb 19, 2016
 
-@author: arthurvaladares
+author: arthurvaladares
 '''
-from django.utils.unittest.compatibility import wraps
+from functools import wraps
 from flask import Flask, request
 from flask.helpers import make_response
 from flask_restful import Api, Resource, reqparse
