@@ -50,7 +50,7 @@ sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "
 import json
 from mobdat.common import LayoutSettings
 from mobdat.builder import WorldBuilder, OpenSimBuilder, SumoBuilder,\
-    DataBuilder
+    DataBuilder, PersonPicker
 
 global world
 global laysettings
@@ -152,3 +152,6 @@ def Controller(settings, pushlist) :
             logger.info('building data for CADIS')
             db = DataBuilder.DataBuilder(settings,world,laysettings)
             db.PushNetworkToFile()
+        elif push == "personpicker":
+            logger.info('building traveler data for experiments')
+            PersonPicker.PersonPicker(settings,world,laysettings)

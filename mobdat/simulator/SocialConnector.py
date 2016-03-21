@@ -73,6 +73,20 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
         self.TripCallbackMap = {}
         self.TripTimerEventQ = []
         self.DataFolder = settings["General"]["Data"]
+        if "ExperimentMode" in settings["SocialConnector"]:
+            self.ExperimentMode = settings["SocialConnector"]["ExperimentMode"]
+            if self.ExperimentMode:
+                try:
+                    fname = settings["Experiment"]["TravelerFilePath"]
+                    data_path = settings["General"]["Data"]
+
+                    with open(os.path.join(data_path,fname)) as data_file:
+                        self.TravelerList = json.load(data_file)
+                except:
+                    self.__Logger.error("could not read traveler information for experiment. Aborting experiment mode.")
+                    self.ExperimentMode = False
+        else:
+            self.ExperimentMode = False
 
         self.Travelers = {}
         self.CreateTravelers()
@@ -92,16 +106,26 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
     def CreateTravelers(self) :
         #for person in self.PerInfo.PersonList.itervalues() :
         count = 0
-        for name, person in self.World.IterNodes(nodetype = 'Person') :
-            if count % 100 == 0 :
-                self.__Logger.warn('%d travelers created', count)
+        if self.ExperimentMode:
+            self.__Logger.warn('Running SocialConnector in experiment mode.')
+            for name in self.TravelerList:
+                person = self.World.FindNodeByName(name)
+                if count % 100 == 0 :
+                    self.__Logger.warn('%d travelers created', count)
+                traveler = Traveler.Traveler(person, self)
+                self.Travelers[name] = traveler
+                count += 1
+        else:
+            for name, person in self.World.IterNodes(nodetype = 'Person') :
+                if count % 100 == 0 :
+                    self.__Logger.warn('%d travelers created', count)
 
-            traveler = Traveler.Traveler(person, self)
-            self.Travelers[name] = traveler
+                traveler = Traveler.Traveler(person, self)
+                self.Travelers[name] = traveler
 
-            count += 1
-            if self.MaximumTravelers > 0 and self.MaximumTravelers < count :
-                break
+                count += 1
+                if self.MaximumTravelers > 0 and self.MaximumTravelers < count :
+                    break
 
             
     # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
