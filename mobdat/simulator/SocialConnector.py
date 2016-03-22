@@ -40,7 +40,7 @@ the social (people) aspects of the mobdat simulation.
 
 import os, sys
 import logging
-from mobdat.simulator.BaseConnector import instrument
+import json
 
 sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
@@ -48,6 +48,7 @@ sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "lib")))
 
 import heapq
+from mobdat.simulator.BaseConnector import instrument
 import BaseConnector, EventHandler, EventTypes, Traveler
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -64,6 +65,21 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         self.MaximumTravelers = int(settings["General"].get("MaximumTravelers", 0))
         self.TripCallbackMap = {}
         self.TripTimerEventQ = []
+        self.DataFolder = settings["General"]["Data"]
+        if "ExperimentMode" in settings["SocialConnector"]:
+            self.ExperimentMode = settings["SocialConnector"]["ExperimentMode"]
+            if self.ExperimentMode:
+                try:
+                    fname = settings["Experiment"]["TravelerFilePath"]
+                    data_path = settings["General"]["Data"]
+
+                    with open(os.path.join(data_path,fname)) as data_file:
+                        self.TravelerList = json.load(data_file)
+                except:
+                    self.__Logger.error("could not read traveler information for experiment. Aborting experiment mode.")
+                    self.ExperimentMode = False
+        else:
+            self.ExperimentMode = False
 
         self.Travelers = {}
         self.CreateTravelers()
@@ -78,16 +94,26 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
     def CreateTravelers(self) :
         #for person in self.PerInfo.PersonList.itervalues() :
         count = 0
-        for name, person in self.World.IterNodes(nodetype = 'Person') :
-            if count % 100 == 0 :
-                self.__Logger.warn('%d travelers created', count)
+        if self.ExperimentMode:
+            self.__Logger.warn('Running SocialConnector in experiment mode.')
+            for name in self.TravelerList:
+                person = self.World.FindNodeByName(name)
+                if count % 100 == 0 :
+                    self.__Logger.warn('%d travelers created', count)
+                traveler = Traveler.Traveler(person, self)
+                self.Travelers[name] = traveler
+                count += 1
+        else:
+            for name, person in self.World.IterNodes(nodetype = 'Person') :
+                if count % 100 == 0 :
+                    self.__Logger.warn('%d travelers created', count)
 
-            traveler = Traveler.Traveler(person, self)
-            self.Travelers[name] = traveler
+                traveler = Traveler.Traveler(person, self)
+                self.Travelers[name] = traveler
 
-            count += 1
-            if self.MaximumTravelers > 0 and self.MaximumTravelers < count :
-                break
+                count += 1
+                if self.MaximumTravelers > 0 and self.MaximumTravelers < count :
+                    break
         del self.World
 
             

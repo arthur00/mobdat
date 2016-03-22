@@ -5,8 +5,9 @@
         "Interval" : 0.200,
         "SecondsPerStep" : 2.0,
         "StartTimeOfDay" : 7.0,
-        "MaximumTravelers" : 5000,
+        "MaximumTravelers" : 0,
         "AutoStart" : true,
+        "Data" : "jsondata",
 		"WorldInfoFile" : "worldinfo.js",
 		"MultiProcessing" : false,
 		"Timer" :
@@ -18,6 +19,12 @@
         "Connectors" : ["opensim", "sumo", "social"]
     },
 
+	"Experiment" :
+    {
+        "NumberOfTravelers" : 2000,
+        "TravelerFilePath" : "travelers.js"
+    },
+
     "Builder" :
     {
         "ExtensionFiles" : ["networks/fullnet/dist_layout.py", "networks/fullnet/business.py", "networks/fullnet/people.py"]
@@ -27,7 +34,8 @@
     {
         "WaitMean" : 1000.0,
         "WaitSigma" : 200.0,
-        "PeopleCount" : 360
+        "PeopleCount" : 360,
+        "ExperimentMode" : true
     },
 
     "OpenSimConnector" :
