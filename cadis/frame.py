@@ -238,6 +238,8 @@ class Frame(object):
         self.produced = set()
         # Stores the types that can be retrieved by app
         self.newlyproduced = {}
+        # Store the types "tracked" by the app (i.e. creation and deletion only)
+        self.tracked = {}
 
         # Properties that changed during this iteration
         self.changedproperties = {}
@@ -390,6 +392,7 @@ class Frame(object):
     def process_declarations(self, app):
         self.produced = app._producer
         self.updated = app._gettersetter
+        self.tracked_only = set()
 
         self.observed = set()
         self.iterate_types = []
@@ -397,6 +400,15 @@ class Frame(object):
             self.observed = self.observed.union(app._getter)
         if app._gettersetter:
             self.observed = self.observed.union(app._gettersetter)
+        if app._tracker:
+            self.tracked_only = app._tracker.difference(self.observed)
+            self.observed = self.observed.union(app._tracker)
+
+        # Check for "parents" of subsets, they need to be fetched too
+        for t in copy(self.observed):
+            if t in schema_subsets:
+                pt = setsof[t]
+                self.observed.add(pt)
 
         for t in self.observed.union(self.produced).union(self.updated):
             # self.changedproperties[t] = {}
@@ -428,10 +440,12 @@ class Frame(object):
         self.iterate_types.extend(permutations)
         self.iterate_types.extend(subsets)
 
+        # prepare structures for storing and pushing new, update, and deletion of objects
         for t in self.produced:
-            self.pushlist[t] = {}
-            self.deletelist[t] = {}
             self.newlyproduced[t] = {}
+        for t in self.updated:
+            self.deletelist[t] = {}
+            self.pushlist[t] = {}
 
         if Frame.Store == None:
             logger.debug("%s creating new store", LOG_HEADER)
@@ -459,8 +473,12 @@ class Frame(object):
             self.mod_storebuffer[t] = {}
             self.del_storebuffer[t] = {}
 
+            # optimization: retrieve only objects that changed since last pull
             if hasattr(Frame.Store, "getupdated"):
-                (new, mod, deleted) = Frame.Store.getupdated(t, self.app._appname)
+                if t in self.tracked_only:
+                    (new, mod, deleted) = Frame.Store.getupdated(t, self.app._appname, tracked_only=True)
+                else:
+                    (new, mod, deleted) = Frame.Store.getupdated(t, self.app._appname)
                 if t in schema_subsets:
                     # Parent type of subset 't'
                     pt = setsof[t]
@@ -552,6 +570,7 @@ class Frame(object):
 
     @instrument
     def push(self):
+        cleartypes = set()
         for t in self.newlyproduced:
             if len(self.newlyproduced[t]) > 0:
                 if hasattr(Frame.Store, "insert_all"):
@@ -559,6 +578,8 @@ class Frame(object):
                 else:
                     for o in self.newlyproduced[t].values():
                         Frame.Store.insert(o, self.app._appname)
+            if t not in self.observed:
+                cleartypes.add(t)
             self.newlyproduced[t] = {}
 
         for t in self.deletelist:
@@ -569,7 +590,8 @@ class Frame(object):
             self.deletelist[t] = {}
 
         Frame.Store.update_all(self.pushlist, self.app._appname)
-        # self.pushlist[t] = {}
+        for t in cleartypes:
+            self.storebuffer[t] = {}
 
     ######################################################
     ## Utility Functions
@@ -623,6 +645,10 @@ class Frame(object):
         return None
 
     def set_property(self, t, o, v, n):
+        # if not a gettersetter for this type, return
+        if t not in self.updated:
+            return
+
         # Newly produced items will be pushed entirely. Skip...
         if not o._primarykey:
             return

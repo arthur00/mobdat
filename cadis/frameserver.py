@@ -99,6 +99,18 @@ class GetUpdated(Resource):
         ret["deleted"] = deleted
         return ret
 
+class GetTracked(Resource):
+    @handle_exceptions
+    def get(self, sim, t):
+        typeObj = FrameServer.name2class[t]
+        (new, updated, deleted) = FrameServer.Store.getupdated(typeObj, sim, copy_objs=False, tracked_only=True)
+        ret = {}
+        ret["new"] = new
+        ret["updated"] = updated
+        ret["deleted"] = deleted
+        return ret
+
+
 class GetPushType(Resource):
     @handle_exceptions
     def get(self, sim, t):
@@ -209,6 +221,7 @@ class FrameServer(object):
         self.api.add_resource(GetInsertDeleteObject, '/<string:sim>/<string:t>/<string:uid>')
         self.api.add_resource(GetPushType, '/<string:sim>/<string:t>')
         self.api.add_resource(GetUpdated, '/<string:sim>/updated/<string:t>')
+        self.api.add_resource(GetTracked, '/<string:sim>/tracked/<string:t>')
         self.api.add_resource(Register, '/<string:sim>')
         server = self
         self.app.run(port=12000, debug=False)

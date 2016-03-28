@@ -42,7 +42,7 @@ import os, sys
 import logging
 from mobdat.simulator.DataModel import Vehicle, Person, BusinessNode,\
     ResidentialNode, Road, SimulationNode
-from cadis.common.IFramed import Producer, GetterSetter
+from cadis.common.IFramed import Producer, GetterSetter, Tracker
 from cadis.common import IFramed
 import json
 from uuid import UUID, uuid4
@@ -59,7 +59,7 @@ import BaseConnector, EventHandler, EventTypes, Traveler
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 @Producer(Vehicle, Person, BusinessNode, Road, ResidentialNode, SimulationNode)
-@GetterSetter(Vehicle, Person, BusinessNode, Road, ResidentialNode, SimulationNode)
+@Tracker(Vehicle)
 class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
            
     # -----------------------------------------------------------------
@@ -199,18 +199,19 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
     # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
     # -----------------------------------------------------------------
-    def HandleDeleteObjectEvent(self, event) :
+    def HandleDeleteVehicles(self) :
         """
         HandleDeleteObjectEvent -- delete object means that a car has completed its
         trip so record the stats and add the next trip for the person
 
         event -- a DeleteObject event object
         """
-
-        vname = event.ObjectIdentity
-        
-        trip = self.TripCallbackMap.pop(vname)
-        trip.TripCompleted(self)
+        deleted = self.frame.deleted(Vehicle)
+        # self.__Logger.debug("Tick SUMO: New vehicles %s", added)
+        for car in deleted:
+            self.__Logger.warn("### Car %s has arrived, completing his trip.", car.Name)
+            trip = self.TripCallbackMap.pop(car.Name)
+            trip.TripCompleted(self)
 
     # -----------------------------------------------------------------
     @instrument
@@ -222,7 +223,7 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
         event -- Timer event object
         """
         self.CurrentStep = self.frame.step
-
+        self.HandleDeleteVehicles()
         if self.CurrentStep % 100 == 0 :
             wtime = self.WorldTime
             qlen = len(self.TripTimerEventQ)

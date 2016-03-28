@@ -131,8 +131,11 @@ class PythonRemoteStore(IStore):
             self.__Logger.exception("Failed to create object from data %s", data)
         return obj
 
-    def getupdated(self, typeObj, sim):
-        resp = requests.get(self.base_address + 'updated/' + typeObj._FULLNAME)
+    def getupdated(self, typeObj, sim, tracked_only=False):
+        if tracked_only:
+            resp = requests.get(self.base_address + 'tracked/' + typeObj._FULLNAME)
+        else:
+            resp = requests.get(self.base_address + 'updated/' + typeObj._FULLNAME)
         jsonlist = json.loads(resp.text)
         (new, mod, deleted) = jsonlist['new'], jsonlist['updated'], jsonlist['deleted']
         if typeObj not in schema.subsets:

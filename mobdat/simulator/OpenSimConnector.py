@@ -233,8 +233,7 @@ class OpenSimVehicle :
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-@Producer(Vehicle)
-@GetterSetter(Vehicle, MovingVehicle)
+@GetterSetter(MovingVehicle)
 class OpenSimConnector(BaseConnector.BaseConnector, IFramed.IFramed) :
 
     # -----------------------------------------------------------------

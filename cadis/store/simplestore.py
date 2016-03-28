@@ -301,7 +301,7 @@ class SimpleStore(IStore):
         else:
             self.__Logger.error("Could not find key %s for object type %s", key, typeObj)
 
-    def getupdated(self, typeObj, sim, copy_objs=True):
+    def getupdated(self, typeObj, sim, copy_objs=True, tracked_only=False):
         with self.lock:
             if typeObj in self.subsets:
                 if hasattr(self, "instruments"):
@@ -309,9 +309,17 @@ class SimpleStore(IStore):
                     res = self.measure_function(typeObj.query, [self], header)
                 else:
                     res = typeObj.query(self)
-                return self.updates4sim[sim][typeObj].get_update(res)
+                if tracked_only:
+                    new_objs, _, del_objs = self.updates4sim[sim][typeObj].get_update(res)
+                    return new_objs, [], del_objs
+                else:
+                    return self.updates4sim[sim][typeObj].get_update(res)
             else:
-                return self.updates4sim[sim][typeObj].updatelist(clear=True, copy_objs=copy_objs)
+                if tracked_only:
+                    new_objs, _, del_objs = self.updates4sim[sim][typeObj].updatelist(clear=True, copy_objs=copy_objs)
+                    return new_objs, [], del_objs
+                else:
+                    return self.updates4sim[sim][typeObj].updatelist(clear=True, copy_objs=copy_objs)
 
     def delete(self, typeObj, primkey, sim):
         with self.lock:
@@ -352,9 +360,9 @@ class InstrumentedSimpleStore(SimpleStore):
         self.instruments[header].append((end-start) * 1000)
         return ret
 
-    def getupdated(self, typeObj, sim, copy_objs=True):
+    def getupdated(self, typeObj, sim, copy_objs=True, tracked_only=False):
         start = time.time()
-        ret = super(InstrumentedSimpleStore, self).getupdated(typeObj, sim, copy_objs)
+        ret = super(InstrumentedSimpleStore, self).getupdated(typeObj, sim, copy_objs, tracked_only)
         end = time.time()
         header = 'getupdated_%s' % typeObj._FULLNAME
         if self.instruments[header] == "":

@@ -106,6 +106,7 @@ class Property(property):
         if hasattr(schema_data, 'frame'):
             frame = schema_data.frame
             if frame.track_changes:
+                # Don't add changes to primary key to the push list
                 if not hasattr(self, "_primarykey"):
                     if self._of in sets or self._of in permutedclss:
                         superset = self._of

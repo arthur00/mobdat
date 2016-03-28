@@ -64,7 +64,7 @@
 		}
 	}
     },
-    
+
     "SumoConnector" :
     {
 	"SumoNetworkPath" : "networks/fullnet/net/",

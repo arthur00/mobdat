@@ -30,11 +30,21 @@ def Getter(*args):
         return cls
     return wrap
 
+def Tracker(*args):
+    def wrap(cls):
+        cls._tracker = set()
+        for t in args:
+            cls._tracker.add(t)
+        return cls
+    return wrap
+
+
 class IFramed(object):
     __metaclass__ = abc.ABCMeta
     _producer = set()
     _getter = set()
     _gettersetter = set()
+    _tracker = set()
 
     @abc.abstractmethod
     def initialize(self):
