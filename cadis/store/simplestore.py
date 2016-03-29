@@ -57,7 +57,7 @@ class SubSetFrameUpdate(object):
 class FrameUpdate(object):
     def __init__(self, t, store):
         self.added = set()
-        self.updated = set()
+        self.updated = {}
         self.deleted = set()
         self.storageobj = set()
         self.objtype = t
@@ -65,7 +65,7 @@ class FrameUpdate(object):
 
     def clear(self):
         self.added.clear()
-        self.updated.clear()
+        self.updated = {}
         self.deleted.clear()
 
     def add(self, o):
@@ -73,16 +73,14 @@ class FrameUpdate(object):
         if hasattr(o, "_storageobj"):
             self.storageobj.add(o._primarykey)
 
-    def update(self, o):
-        self.updated.add(o._primarykey)
-        if hasattr(o, "_storageobj"):
-            self.storageobj.add(o._primarykey)
+    def update(self, update_dict):
+        self.updated.update(update_dict)
 
     def delete(self, primkey):
         if primkey in self.added:
             self.added.remove(primkey)
         if primkey in self.updated:
-            self.updated.remove(primkey)
+            del self.updated[primkey]
         self.deleted.add(primkey)
 
     def updatelist(self, clear=False, copy_objs=True):
@@ -94,7 +92,7 @@ class FrameUpdate(object):
             self.clear()
 
         added = []
-        updated = []
+        updated = cp_updated
         deleted = []
         for key in cp_added:
             if key not in self.store[self.objtype]:
@@ -106,16 +104,6 @@ class FrameUpdate(object):
                     added.append(deepcopy(self.store[self.objtype][key]))
                 else:
                     added.append(self.store[self.objtype][key])
-        for key in cp_updated:
-            if key not in self.store[self.objtype]:
-                continue
-            if key in self.storageobj:
-                updated.append(PermutationObjectfactory(self.store[self.objtype][key]))
-            else:
-                if copy_objs:
-                    updated.append(deepcopy(self.store[self.objtype][key]))
-                else:
-                    updated.append(self.store[self.objtype][key])
         for key in cp_deleted:
             deleted.append(key)
 
@@ -240,6 +228,8 @@ class SimpleStore(IStore):
 
     def update(self, t, update_dict, sim):
         # update_dict: { primary_key : { property_name : property_value } }
+        # Store updates to original objects of permuted sets
+        extra_updates = {}
         for primkey in update_dict.keys():
             if primkey not in self.store[t]:
                 self.__Logger.info("could not find key %s in store for type %s", primkey, t)
@@ -251,6 +241,12 @@ class SimpleStore(IStore):
                 if hasattr(obj, "objectlinks"):
                     try:
                         # cls = typeObj.__dimensiontable__[pname]
+                        if obj._originalcls not in extra_updates:
+                            extra_updates[obj._originalcls] = {primkey : {pname : updates[pname]}}
+                        else:
+                            if primkey not in extra_updates[obj._originalcls]:
+                                extra_updates[obj._originalcls][primkey] = {}
+                            extra_updates[obj._originalcls][primkey][pname] = updates[pname]
                         pobj = self.store[obj._originalcls][primkey]
                         setattr(pobj, pname, updates[pname])
                     except:
@@ -258,14 +254,19 @@ class SimpleStore(IStore):
                 else:
                     setattr(obj, pname, updates[pname])
 
+        if t not in schema.subsets:
             # TODO: There's a better way of doing this..
             for s in self.updates4sim.keys():
                 if s != sim:
-                    self.updates4sim[s][t].update(obj)
+                    self.updates4sim[s][t].update(update_dict)
+                for t in extra_updates.keys():
+                    self.updates4sim[s][t].update(extra_updates[t])
+
 
     def update_all(self, pushlist, sim):
         for t in pushlist.keys():
-            self.update(t, pushlist[t], sim)
+            if len(pushlist[t]) > 0:
+                self.update(t, pushlist[t], sim)
 
     def get(self, typeObj, copy_objs=True):
         with self.lock:
@@ -311,13 +312,13 @@ class SimpleStore(IStore):
                     res = typeObj.query(self)
                 if tracked_only:
                     new_objs, _, del_objs = self.updates4sim[sim][typeObj].get_update(res)
-                    return new_objs, [], del_objs
+                    return new_objs, {}, del_objs
                 else:
                     return self.updates4sim[sim][typeObj].get_update(res)
             else:
                 if tracked_only:
                     new_objs, _, del_objs = self.updates4sim[sim][typeObj].updatelist(clear=True, copy_objs=copy_objs)
-                    return new_objs, [], del_objs
+                    return new_objs, {}, del_objs
                 else:
                     return self.updates4sim[sim][typeObj].updatelist(clear=True, copy_objs=copy_objs)
 

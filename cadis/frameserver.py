@@ -93,6 +93,8 @@ class GetUpdated(Resource):
     def get(self, sim, t):
         typeObj = FrameServer.name2class[t]
         (new, updated, deleted) = FrameServer.Store.getupdated(typeObj, sim, copy_objs=False)
+        if type(updated) is dict:
+            updated = {str(k):v for k,v in updated.items()}
         ret = {}
         ret["new"] = new
         ret["updated"] = updated
@@ -103,10 +105,10 @@ class GetTracked(Resource):
     @handle_exceptions
     def get(self, sim, t):
         typeObj = FrameServer.name2class[t]
-        (new, updated, deleted) = FrameServer.Store.getupdated(typeObj, sim, copy_objs=False, tracked_only=True)
+        (new, _, deleted) = FrameServer.Store.getupdated(typeObj, sim, copy_objs=False, tracked_only=True)
         ret = {}
         ret["new"] = new
-        ret["updated"] = updated
+        ret["updated"] = {}
         ret["deleted"] = deleted
         return ret
 

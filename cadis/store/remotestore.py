@@ -140,17 +140,18 @@ class PythonRemoteStore(IStore):
         (new, mod, deleted) = jsonlist['new'], jsonlist['updated'], jsonlist['deleted']
         if typeObj not in schema.subsets:
             newobjlist = []
-            updatedobjlist = []
+            #updatedobjlist = []
             deletedobjlist = []
             for data in new:
                 obj = self.create_obj(typeObj, data)
                 newobjlist.append(obj)
-            for data in mod:
-                obj = self.create_obj(typeObj, data)
-                updatedobjlist.append(obj)
+            mod = {UUID(k):v for k,v in mod.items()}
+            #for data in mod:
+                #obj = self.create_obj(typeObj, data)
+                #updatedobjlist.append(obj)
             for data in deleted:
                 deletedobjlist = [UUID(v) for v in deleted]
-            return (newobjlist, updatedobjlist, deletedobjlist)
+            return (newobjlist, mod, deletedobjlist)
         else:
             return ([UUID(v) for v in new], [UUID(v) for v in mod], [UUID(v) for v in deleted])
 

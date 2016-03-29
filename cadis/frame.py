@@ -530,11 +530,16 @@ class Frame(object):
                         self.new_storebuffer[t][o._primarykey] = o
                         if o.__class__ in self.fkdict:
                             self._fkobj(o)
-                    for o in mod:
-                        self.storebuffer[t][o._primarykey] = o
-                        self.mod_storebuffer[t][o._primarykey] = o
-                        if o.__class__ in self.fkdict:
-                            self._fkobj(o)
+                    for key in mod:
+                        for pname in mod[key]:
+                            obj = self.storebuffer[t][key]
+                            prop = getattr(obj, pname)
+                            if hasattr(prop, "__decode__"):
+                                prop = prop.__decode__(mod[key][pname])
+                            else:
+                                prop = mod[key][pname]
+                            setattr(obj, pname, prop)
+                            self.mod_storebuffer[t][key] = obj
                     for key in deleted:
                         if key in self.storebuffer[t]:
                             o = self.storebuffer[t][key]
