@@ -57,11 +57,13 @@ FlaskConfig.init_app(app)
 api = Api(app)
 
 def signal_handler(signal, frame):
-    print('You pressed Ctrl+C!')
+    print('Quitting frameserver...')
     server.shutdown()
     sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGALRM, signal_handler)
+signal.alarm(2400)
 
 def handle_exceptions(f):
     @wraps(f)
@@ -154,6 +156,7 @@ class GetInsertDeleteObject(Resource):
         obj = create_obj(typeObj, o)
         # TODO: Rebuild obj from json
         FrameServer.Store.insert(obj, sim)
+        return {}
 
     @handle_exceptions
     def delete(self, sim, t, uid):

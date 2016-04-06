@@ -26,6 +26,8 @@ class SubSetFrameUpdate(object):
         self.object_dicts = {}
 
     def get_update(self, newobjids):
+        if type(newobjids) != set:
+            newobjids = set(newobjids)
         tmp_object_dicts = {}
         # Calculate set of new objects since last query
         new = []
@@ -162,10 +164,10 @@ class SimpleStore(IStore):
                 # self.store[obj.__class__] = {}
                 self.__Logger.error("ERROR! Object type supposed to exist in store")
                 return False
-            if obj._primarykey in self.store[cls]:
-                # new = True
-                self.__Logger.error("ERROR! Insert should only be used for new items")
-                return False
+            #if obj._primarykey in self.store[cls]:
+            #    # new = True
+            #    self.__Logger.error("ERROR! Insert should only be used for new items")
+            #    return False
 
             # if this class is a permutation of others, create permutations
             if hasattr(obj, "__dimensiontable__"):

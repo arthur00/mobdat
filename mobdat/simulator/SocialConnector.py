@@ -56,6 +56,8 @@ sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "
 import heapq
 import BaseConnector, EventHandler, EventTypes, Traveler
 
+DEBUG = False
+
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 @Producer(Vehicle, Person, BusinessNode, Road, ResidentialNode, SimulationNode)
@@ -73,20 +75,24 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
         self.TripCallbackMap = {}
         self.TripTimerEventQ = []
         self.DataFolder = settings["General"]["Data"]
-        if "ExperimentMode" in settings["SocialConnector"]:
-            self.ExperimentMode = settings["SocialConnector"]["ExperimentMode"]
-            if self.ExperimentMode:
-                try:
-                    fname = settings["Experiment"]["TravelerFilePath"]
-                    data_path = settings["General"]["Data"]
-
-                    with open(os.path.join(data_path,fname)) as data_file:
-                        self.TravelerList = json.load(data_file)
-                except:
-                    self.__Logger.error("could not read traveler information for experiment. Aborting experiment mode.")
-                    self.ExperimentMode = False
-        else:
+        if DEBUG:
+            self.MaximumTravelers = 100
             self.ExperimentMode = False
+        else:
+            if "ExperimentMode" in settings["SocialConnector"]:
+                self.ExperimentMode = settings["SocialConnector"]["ExperimentMode"]
+                if self.ExperimentMode:
+                    try:
+                        fname = settings["Experiment"]["TravelerFilePath"]
+                        data_path = settings["General"]["Data"]
+
+                        with open(os.path.join(data_path,fname)) as data_file:
+                            self.TravelerList = json.load(data_file)
+                    except:
+                        self.__Logger.error("could not read traveler information for experiment. Aborting experiment mode.")
+                        self.ExperimentMode = False
+            else:
+                self.ExperimentMode = False
 
         self.Travelers = {}
         self.CreateTravelers()
@@ -266,6 +272,10 @@ class SocialConnector(BaseConnector.BaseConnector, IFramed.IFramed):
         rlimit = None
         blimit = None
         rolimit = 0
+        if DEBUG:
+            plimit = 10
+            rlimit = 10
+            blimit = 10
         if self.DataFolder:
             try:
                 f = open(os.path.join(self.DataFolder,"people.js"), "r")

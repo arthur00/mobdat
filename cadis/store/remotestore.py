@@ -75,7 +75,8 @@ class PythonRemoteStore(IStore):
 
     def insert(self, obj, sim):
         jsonobj = self.encoder.encode(obj)
-        response = requests.put("%s%s/%s" % (self.base_address, obj._FULLNAME, obj.ID), data={'obj' : jsonobj }, headers={'Content-Type':'application/json', 'InsertType':'Single'})
+        response = requests.put("%s%s/%s" % (self.base_address, obj._FULLNAME, obj.ID), data={'obj' : jsonobj })
+
         return response
 
     def insert_all(self, t, list_obj, sim):
@@ -88,17 +89,7 @@ class PythonRemoteStore(IStore):
         jsonlist = json.loads(resp.text)
         objlist = []
         for data in jsonlist:
-            # obj = typeObj.__new__(typeObj)
-            obj = CADIS()
-            obj.__class__ = typeObj
-            for dim in obj._dimensions:
-                prop = getattr(obj, dim._name)
-                if hasattr(prop, "__decode__"):
-                    prop = prop.__decode__(data[dim._name])
-                else:
-                    prop = data[dim._name]
-                setattr(obj, dim._name, prop)
-            obj.ID = UUID(data["ID"])
+            obj = self.create_obj(typeObj, data)
             objlist.append(obj)
         return objlist
 

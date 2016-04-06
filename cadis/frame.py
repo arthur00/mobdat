@@ -553,7 +553,6 @@ class Frame(object):
                 for o in Frame.Store.get(t):
                     tmpbuffer[t][o._primarykey] = o
 
-                # TODO: Remove when Store does this
                 # Added objects since last pull
                 for o in tmpbuffer[t].values():
                     if o._primarykey not in self.storebuffer[t]:
@@ -594,9 +593,16 @@ class Frame(object):
                     del self.pushlist[t][o._primarykey]
             self.deletelist[t] = {}
 
-        Frame.Store.update_all(self.pushlist, self.app._appname)
-        for t in cleartypes:
-            self.storebuffer[t] = {}
+        if hasattr(Frame.Store, "update_all"):
+            Frame.Store.update_all(self.pushlist, self.app._appname)
+            for t in cleartypes:
+                self.storebuffer[t] = {}
+        else:
+            for t in self.pushlist:
+                for primkey in self.pushlist[t]:
+                    Frame.Store.insert(self.storebuffer[t][primkey], self.app._appname)
+            for t in cleartypes:
+                self.storebuffer[t] = {}
 
     ######################################################
     ## Utility Functions
