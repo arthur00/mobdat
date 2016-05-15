@@ -13,7 +13,7 @@ The following packages need to be installed to run mobdat:
   - The pymongo package is required for the BSON encoder, see
   installation instructions at https://pypi.python.org/pypi/pymongo/
 
-* SUMO 0.19
+* SUMO 0.23
 
 * OpenSim 
   - JsonStore must be turned on, instructions for configuring the
