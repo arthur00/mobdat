@@ -88,7 +88,7 @@ class Trip :
             connector -- object of type SocialConnector
         """
 
-        connector.GenerateTripEndEvent(self)
+        #connector.GenerateTripEndEvent(self)
 
         self.Traveler.TripCompleted(self)
 
@@ -105,7 +105,7 @@ class Trip :
         self.ActualStartTime = connector.WorldTime
         self.Traveler.TripStarted(self)
 
-        connector.GenerateTripBegEvent(self)
+        #connector.GenerateTripBegEvent(self)
         connector.GenerateAddVehicleEvent(self)
 
     # -----------------------------------------------------------------

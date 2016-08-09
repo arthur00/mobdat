@@ -16,9 +16,8 @@
 			"Minutes" : 20,
 			"Hours" : 0
 		},
-        "Connectors" : ["opensim", "sumo", "social"]
+        "Connectors" : ["social"]
     },
-
 	"Experiment" :
     {
         "NumberOfTravelers" : 2000,
@@ -28,6 +27,13 @@
     "Builder" :
     {
         "ExtensionFiles" : ["networks/fullnet/dist_layout.py", "networks/fullnet/business.py", "networks/fullnet/people.py"]
+    },
+
+    "HLA" :
+    {
+        "FederateType" : "UrbanSimulation",
+        "FederationName" : "Mobdat",
+        "FOM" : "fom/UrbanSim.xml"
     },
 
     "SocialConnector" :

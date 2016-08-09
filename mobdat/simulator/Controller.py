@@ -44,6 +44,7 @@ import logging
 import csv
 from threading import Thread
 import datetime
+from hla.hla_connector import HLAConnector
 
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
@@ -56,23 +57,22 @@ SimulatorShutdown = False
 CurrentIteration = 0
 FinalIteration = 0
 
-INSTRUMENT = True
+INSTRUMENT = False
 INSTRUMENT_HEADERS = {}
 
 import platform, time, threading, cmd
-import EventRouter, EventTypes, EventHandler
+import EventTypes
 from mobdat.common.Utilities import AuthByUserName
 from mobdat.common import LayoutSettings, WorldInfo
-from multiprocessing import Process
+from threading import Thread
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
-import SumoConnector, OpenSimConnector, SocialConnector, StatsConnector
+import SumoConnector, OpenSimConnector, SocialConnector
 
 _SimulationControllers = {
     'sumo' : SumoConnector.SumoConnector,
     'social' : SocialConnector.SocialConnector,
-    'stats' : StatsConnector.StatsConnector,
     'opensim' : OpenSimConnector.OpenSimConnector
     }
 
@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 
 class TimerThread(threading.Thread) :
     # -----------------------------------------------------------------
-    def __init__(self, evrouter, settings) :
+    def __init__(self, settings) :
         """
         This thread will drive the simulation steps by sending periodic clock
         ticks that each of the connectors can process.
@@ -93,9 +93,9 @@ class TimerThread(threading.Thread) :
         """
 
         threading.Thread.__init__(self)
-
+        self.hla_conn = HLAConnector(settings, "TimerFederate")
+        self.hla_conn.start()
         self.__Logger = logging.getLogger(__name__)
-        self.EventRouter = evrouter
         self.IntervalTime = float(settings["General"]["Interval"])
         timer = settings["General"].get("Timer", None)
         if timer:
@@ -127,10 +127,16 @@ class TimerThread(threading.Thread) :
         global SimulatorStartup, SimulatorShutdown
         global FinalIteration, CurrentIteration
 
+        while not self.hla_conn.ready():
+            time.sleep(1.0)
+
+        self.hla_conn.producesInteraction("HLAinteractionRoot.TimerEvent")
+        SimulatorStartup = True
+
         # Wait for the signal to start the simulation, this allows all of the
         # connectors to initialize
-        while not (SimulatorStartup or SimulatorShutdown):
-            time.sleep(5.0)
+        #while not (SimulatorStartup or SimulatorShutdown):
+        #    time.sleep(5.0)
 
         # Start the main simulation loop
         self.__Logger.debug("start main simulation loop")
@@ -142,30 +148,24 @@ class TimerThread(threading.Thread) :
             self.exec_start = datetime.datetime.now()
 
         CurrentIteration = 0
+        pmap = {}
         while not SimulatorShutdown :
             if FinalIteration > 0 and CurrentIteration >= FinalIteration :
                 break
 
+            #event = EventTypes.TimerEvent(CurrentIteration, stime)
+            #self.EventRouter.RouterQueue.put(event)
             stime = self.Clock()
 
-            event = EventTypes.TimerEvent(CurrentIteration, stime)
-            self.EventRouter.RouterQueue.put(event)
+            pmap["CurrentStep"] = CurrentIteration
+            self.hla_conn.sendInteraction("HLAinteractionRoot.TimerEvent", pmap)
 
             etime = self.Clock()
 
-            CurrentIteration += 1
-            if INSTRUMENT:
-                ievent = EventTypes.InstrumentEvent(CurrentIteration)
-                self.EventRouter.RouterQueue.put(ievent)
-
-            # if a timer is set and we have run for the designated, send the shutdown message.
-            if self.timer:
-                d = datetime.datetime.now() - self.exec_start
-                if d > self.timer:
-                    SimulatorShutdown = True
-
             if (etime - stime) < self.IntervalTime :
                 time.sleep(self.IntervalTime - (etime - stime))
+
+            CurrentIteration += 1
 
         # compute a few stats
         elapsed = self.Clock() - starttime
@@ -174,8 +174,8 @@ class TimerThread(threading.Thread) :
             self.__Logger.warn("%d iterations completed with an elapsed time %f or %f ms per iteration", CurrentIteration, elapsed, avginterval)
 
         # send the shutdown events
-        event = EventTypes.ShutdownEvent(False)
-        self.EventRouter.RouterQueue.put(event)
+        #event = EventTypes.ShutdownEvent(False)
+        #self.EventRouter.RouterQueue.put(event)
 
         SimulatorShutdown = True
 
@@ -254,43 +254,32 @@ def Controller(settings) :
     infofile = settings["General"].get("WorldInfoFile","info.js")
     logger.info('loading world data from %s',infofile)
     world = WorldInfo.WorldInfo.LoadFromFile(infofile)
-    process = settings["General"].get("MultiProcessing", False)
     autostart = settings["General"].get("AutoStart", False)
 
     cnames = settings["General"].get("Connectors",['sumo', 'opensim', 'social', 'stats'])
-    #if 'opensim' in cnames:
-    #    cnames.remove('opensim')
-    #    for sname in settings["OpenSimConnector"]["Scenes"].keys():
-    #        _SimulationControllers['osc:'+sname] = OpenSimConnector.OpenSimConnector
-    #        cnames.append('osc:'+sname)
-    evrouter = EventRouter.EventRouter()
-    # initialize the connectors first
     connectors = []
+    hla_connectors = {}
+
+    # start the timer thread
+    thread = TimerThread(settings)
+
     for cname in cnames :
         if cname not in _SimulationControllers :
             logger.warn('skipping unknown simulation connector; %s' % (cname))
             continue
 
-        connector = _SimulationControllers[cname](evrouter, settings, world, laysettings, cname)
-        if process:
-            connproc = Process(target=connector.SimulationStart, args=())
-        else:
-            connproc = Thread(target=connector.SimulationStart, args=())
+        hla_conn = HLAConnector(settings, cname)
+        hla_conn.start()
+        #while not hla_conn.ready():
+        #    time.sleep(1)
+        connector = _SimulationControllers[cname](hla_conn, settings, world, laysettings, cname)
+        connproc = Thread(target=connector.SimulationStart, args=())
         connproc.start()
         connectors.append(connproc)
 
-    if process:
-        evrouterproc = Process(target=evrouter.RouteEvents, args=())
-    else:
-        evrouterproc = Thread(target=evrouter.RouteEvents, args=())
-    evrouterproc.start()
-
-    # start the timer thread
-    thread = TimerThread(evrouter, settings)
     thread.start()
-
-    controller = MobdatController(evrouter, logger, autostart)
-    controller.cmdloop()
+    #controller = MobdatController(evrouter, logger, autostart)
+    #controller.cmdloop()
 
     del world
 
@@ -301,7 +290,7 @@ def Controller(settings) :
         connproc.join()
 
     # and send the shutdown event to the router
-    event = EventTypes.ShutdownEvent(True)
-    evrouter.RouterQueue.put(event)
+    #event = EventTypes.ShutdownEvent(True)
+    #evrouter.RouterQueue.put(event)
 
-    evrouterproc.join()
+    #evrouterproc.join()

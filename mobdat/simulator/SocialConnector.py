@@ -42,6 +42,9 @@ import os, sys
 import logging
 import json
 
+from hla.hla_connector import HLAConnector
+import time
+
 sys.path.append(os.path.join(os.environ.get("SUMO_HOME"), "tools"))
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
@@ -49,19 +52,18 @@ sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "
 
 import heapq
 from mobdat.simulator.BaseConnector import instrument
-import BaseConnector, EventHandler, EventTypes, Traveler
+import BaseConnector, EventTypes, Traveler
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
+class SocialConnector(BaseConnector.BaseConnector) :
            
     # -----------------------------------------------------------------
-    def __init__(self, evrouter, settings, world, netsettings, cname) :
-        EventHandler.EventHandler.__init__(self, evrouter)
+    def __init__(self, hlaconn, settings, world, netsettings, cname) :
         BaseConnector.BaseConnector.__init__(self, settings, world, netsettings)
 
         self.__Logger = logging.getLogger(__name__)
-
+        self.hlaconn = hlaconn
         self.MaximumTravelers = int(settings["General"].get("MaximumTravelers", 0))
         self.TripCallbackMap = {}
         self.TripTimerEventQ = []
@@ -122,39 +124,6 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
     # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
     # -----------------------------------------------------------------
-    def GenerateTripBegEvent(self, trip) :
-        """
-        GenerateTripBegEvent -- create and publish a 'tripstart' event
-        at the beginning of a trip
-        
-        trip -- object of type Trip
-        """
-        pname = trip.Traveler.Person.Name
-        tripid = trip.TripID
-        sname = trip.Source.Name
-        dname = trip.Destination.Name
-
-        event = EventTypes.TripBegStatsEvent(self.CurrentStep, pname, tripid, sname, dname)
-        self.PublishEvent(event)
-
-
-    # -----------------------------------------------------------------
-    def GenerateTripEndEvent(self, trip) :
-        """
-        GenerateTripEndEvent -- create and publish an event to capture
-        statistics about a completed trip
-        
-        trip -- a Trip object for a recently completed trip
-        """
-        pname = trip.Traveler.Person.Name
-        tripid = trip.TripID
-        sname = trip.Source.Name
-        dname = trip.Destination.Name
-
-        event = EventTypes.TripEndStatsEvent(self.CurrentStep, pname, tripid, sname, dname)
-        self.PublishEvent(event)
-
-    # -----------------------------------------------------------------
     @instrument
     def GenerateAddVehicleEvent(self, trip) :
         """
@@ -164,19 +133,27 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         trip -- Trip object initialized with traveler, vehicle and destination information
         """
 
+
         vname = str(trip.VehicleName)
         vtype = str(trip.VehicleType)
         rname = str(trip.Source.Capsule.DestinationName)
         tname = str(trip.Destination.Capsule.SourceName)
+#
+#         self.__Logger.debug('add vehicle %s from %s to %s',vname, rname, tname)
+#
+#         # save the trip so that when the vehicle arrives we can get the trip
+#         # that caused the car to be created
+#         self.TripCallbackMap[vname] = trip
+#
+#         event = EventTypes.EventAddVehicle(vname, vtype, rname, tname)
+        addv = {}
+        addv["VehicleName"] = vname
+        addv["VehicleType"] = vtype
+        addv["DestinationName"] = rname
+        addv["Source"] = tname
 
-        self.__Logger.debug('add vehicle %s from %s to %s',vname, rname, tname)
-
-        # save the trip so that when the vehicle arrives we can get the trip
-        # that caused the car to be created
-        self.TripCallbackMap[vname] = trip
-
-        event = EventTypes.EventAddVehicle(vname, vtype, rname, tname)
-        self.PublishEvent(event)
+        #self.PublishEvent(event)
+        self.hlaconn.sendInteraction("HLAinteractionRoot.AddVehicle", addv)
         self.vehicle_count += 1
 
     # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -185,7 +162,7 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
 
     # -----------------------------------------------------------------
     @instrument
-    def HandleDeleteObjectEvent(self, event) :
+    def HandleDeleteObjectEvent(self, pmap) :
         """
         HandleDeleteObjectEvent -- delete object means that a car has completed its
         trip so record the stats and add the next trip for the person
@@ -193,7 +170,8 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         event -- a DeleteObject event object
         """
 
-        vname = event.ObjectIdentity
+        #vname = event.ObjectIdentity
+        vname = pmap["ID"]
         
         trip = self.TripCallbackMap.pop(vname)
         trip.TripCompleted(self)
@@ -201,14 +179,16 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
 
     # -----------------------------------------------------------------
     @instrument
-    def HandleTimerEvent(self, event) :
+    def HandleTimerEvent(self, pmap) :
         """
         HandleTimerEvent -- timer event happened, process pending events from
         the eventq
 
         event -- Timer event object
         """
-        self.CurrentStep = event.CurrentStep
+        #self.CurrentStep = event.CurrentStep
+        self.CurrentStep = pmap["CurrentStep"]
+        print "#HandleTimerEvent#"
 
         if self.CurrentStep % 100 == 0 :
             wtime = self.WorldTime
@@ -229,9 +209,21 @@ class SocialConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
 
     # -----------------------------------------------------------------
     def SimulationStart(self) :
-        self.SubscribeEvent(EventTypes.EventDeleteObject, self.HandleDeleteObjectEvent)
-        self.SubscribeEvent(EventTypes.TimerEvent, self.HandleTimerEvent)
-        self.SubscribeEvent(EventTypes.ShutdownEvent, self.HandleShutdownEvent)
+        #self.SubscribeEvent(EventTypes.EventDeleteObject, self.HandleDeleteObjectEvent)
+        #self.SubscribeEvent(EventTypes.TimerEvent, self.HandleTimerEvent)
+        #self.SubscribeEvent(EventTypes.ShutdownEvent, self.HandleShutdownEvent)
 
         # all set... time to get to work!
-        self.HandleEvents()
+        while not self.hlaconn.ready():
+            time.sleep(1.0)
+        att_map = {}
+        att_map["Position"] = "Position"
+        att_map["Angle"] = "HLAfloat64BE"
+        att_map["Velocity"] = "HLAfloat64BE"
+        att_map["VehicleName"] = "HLAASCIIstring"
+        att_map["VehicleType"] = "HLAASCIIstring"
+        self.hlaconn.registerAttributes("HLAobjectRoot.Vehicle", att_map)
+        self.hlaconn.producesInteraction("HLAinteractionRoot.AddVehicle")
+        self.hlaconn.subscribesInteraction("HLAinteractionRoot.DeleteObject", self.HandleDeleteObjectEvent)
+        self.hlaconn.subscribesInteraction("HLAinteractionRoot.TimerEvent", self.HandleTimerEvent)
+        #self.HandleEvents()

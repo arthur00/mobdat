@@ -42,7 +42,6 @@ import os, sys
 import logging
 import csv
 from functools import wraps
-from mobdat.simulator import EventTypes
 from mobdat.simulator.Controller import INSTRUMENT, INSTRUMENT_HEADERS
 import datetime
 
@@ -126,7 +125,7 @@ class BaseConnector :
                 writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=self.fieldnames)
                 writer.writeheader()
                 self.exec_start = None
-            self.SubscribeEvent(EventTypes.InstrumentEvent, self.HandleInstrumentation)
+            #self.SubscribeEvent(EventTypes.InstrumentEvent, self.HandleInstrumentation)
 
         # Save network information
         self.NetSettings = netsettings

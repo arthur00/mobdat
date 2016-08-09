@@ -52,18 +52,17 @@ from sumolib import checkBinary
 
 import traci
 import traci.constants as tc
-import BaseConnector, EventHandler, EventTypes
+import BaseConnector, EventTypes
 from mobdat.common import ValueTypes
 
 import math
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-class SumoConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
+class SumoConnector(BaseConnector.BaseConnector) :
 
     # -----------------------------------------------------------------
     def __init__(self, evrouter, settings, world, netsettings, cname) :
-        EventHandler.EventHandler.__init__(self, evrouter)
         BaseConnector.BaseConnector.__init__(self, settings, world, netsettings)
 
         self.__Logger = logging.getLogger(__name__)

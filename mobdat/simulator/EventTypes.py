@@ -226,21 +226,6 @@ class EventDeleteObject(ObjectEvent) :
 
 ## XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ## XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-class EventPropertyChange(ObjectEvent) :
-    # -----------------------------------------------------------------
-    def __init__(self, identity, propkey, propval) :
-        ObjectEvent.__init__(self, identity)
-        self.ObjectProperty = propkey
-        self.ObjectValue = propval
-
-    # -----------------------------------------------------------------
-    def __str__(self) :
-        pstring = super(EventPropertyChange,self).__str__()
-        fstring = "{0},{1}:{2}"
-        return fstring.format(pstring,self.ObjectProperty,self.ObjectValue)
-
-## XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-## XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 class EventObjectDynamics(ObjectEvent) :
 
     # -----------------------------------------------------------------

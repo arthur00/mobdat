@@ -53,7 +53,7 @@ sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "lib")))
 
 import uuid
-import BaseConnector, EventHandler, EventTypes
+import BaseConnector, EventTypes
 from mobdat.common import ValueTypes
 
 from collections import deque
@@ -229,7 +229,7 @@ class OpenSimVehicle :
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-class OpenSimConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
+class OpenSimConnector(BaseConnector.BaseConnector) :
 
     # -----------------------------------------------------------------
     def __init__(self, evrouter, settings, world, netsettings, cname) :
@@ -244,7 +244,6 @@ class OpenSimConnector(EventHandler.EventHandler, BaseConnector.BaseConnector) :
         if self.Debug == True:
             self.debug_ct = 0
 
-        EventHandler.EventHandler.__init__(self, evrouter)
         BaseConnector.BaseConnector.__init__(self, settings, world, netsettings)
 
         self.__Logger = logging.getLogger(__name__)
