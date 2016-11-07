@@ -91,35 +91,11 @@ class OpenSimUpdateThread(threading.Thread) :
     # -----------------------------------------------------------------
     def ProcessUpdatesLoop(self) :
         while True :
-            try :
-                # wait synchronously for the first incoming request
-                vname = self.WorkQ.get(True)
-                if not vname :
-                    return
-
-                updates = [vname]
-                self.WorkQ.task_done()
-
-                count = 1
-
-                # then grab everything thats in the queue
-                while not self.WorkQ.empty() :
-                    vname = self.WorkQ.get()
-                    if not vname :
-                        self.WorkQ.task_done()
-                        return
-
-                    updates.append(vname)
-                    self.WorkQ.task_done()
-
-                    count += 1
-                    if count >= 50 :
-                        break
-
+            updates = self.WorkQ.get(True)
+            if updates:
                 self.ProcessUpdates(updates)
-
-            except Queue.Empty as _ :
-                pass
+            else:
+                break
 
     # -----------------------------------------------------------------
     def ProcessUpdates(self, vnames) :
@@ -163,7 +139,7 @@ class OpenSimUpdateThread(threading.Thread) :
                 self.TotalUpdates += count
                 bulkupdate = sinfo["Updates"]
                 sim = sinfo["Sim"]
-                result = sim["RemoteControl"].BulkDynamics(bulkupdate)
+                result = sim["RemoteControl"].BulkDynamics(bulkupdate, True)
 
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -232,7 +208,7 @@ class OpenSimVehicle :
 class OpenSimConnector(BaseConnector.BaseConnector) :
 
     # -----------------------------------------------------------------
-    def __init__(self, evrouter, settings, world, netsettings, cname) :
+    def __init__(self, hlaconn, settings, world, netsettings, cname) :
         """Initialize the OpenSimConnector by creating the opensim remote control handlers.
 
         Keyword arguments:
@@ -243,7 +219,7 @@ class OpenSimConnector(BaseConnector.BaseConnector) :
         self.Debug = True
         if self.Debug == True:
             self.debug_ct = 0
-
+        self.hlaconn = hlaconn
         BaseConnector.BaseConnector.__init__(self, settings, world, netsettings)
 
         self.__Logger = logging.getLogger(__name__)
@@ -321,13 +297,14 @@ class OpenSimConnector(BaseConnector.BaseConnector) :
 
     # -----------------------------------------------------------------
     @instrument
-    def HandleCreateObjectEvent(self,event) :
-        OpenSimPosition = event.ObjectPosition.ScaleVector(self.WorldSize).AddVector(self.WorldOffset)
+    def HandleCreateObjectEvent(self, pmap) :
+        position = ValueTypes.Vector3(pmap["Position"].getX(), pmap["Position"].getY(), pmap["Position"].getZ())
+        OpenSimPosition = position.ScaleVector(self.WorldSize).AddVector(self.WorldOffset)
         sim = GetSceneFromCoordinates(OpenSimPosition.x,OpenSimPosition.y,self)
 
-        vtype = sim["VehicleTypes"][event.ObjectType]
+        vtype = sim["VehicleTypes"][pmap["VehicleType"]]
         vtypename = vtype.Name
-        vname = event.ObjectIdentity
+        vname = pmap["ID"]
         self.Vehicles2Sim[vname] = sim
 
         self.vehicle_count += 1
@@ -369,19 +346,19 @@ class OpenSimConnector(BaseConnector.BaseConnector) :
 
     # -----------------------------------------------------------------
     @instrument
-    def HandleDeleteObjectEvent(self,event) :
+    def HandleDeleteObjectEvent(self,pmap) :
         """Handle the delete object event. In this case, rather than delete the
         object from the scene completely, mothball it in a location well away from
         the simulation.
         """
         
-        vname = event.ObjectIdentity
+        vname = pmap["ID"]
         if vname not in self.Vehicles2Sim :
             self.__Logger.warn("attempt to delete unknown vehicle %s" % (vname))
             return True
         sim = self.Vehicles2Sim[vname]
 
-        vehicle = sim["Vehicles"][event.ObjectIdentity]
+        vehicle = sim["Vehicles"][vname]
         sim["VehicleReuseList"][vehicle.VehicleType].append(vehicle)
 
         mothball = OpenSimVehicleDynamics()
@@ -392,7 +369,7 @@ class OpenSimConnector(BaseConnector.BaseConnector) :
         vehicle.LastUpdate = mothball
         vehicle.InUpdateQueue = True
 
-        self.WorkQ.put(vehicle.VehicleName)
+        self.WorkQ.put([vehicle.VehicleName])
         self.vehicle_count -= 1
 
         # result = self.OpenSimConnector.DeleteObject(vehicleID)
@@ -403,8 +380,10 @@ class OpenSimConnector(BaseConnector.BaseConnector) :
 
     # -----------------------------------------------------------------
     @instrument
-    def HandleObjectDynamicsEvent(self,event) :
-        vname = event.ObjectIdentity
+    def HandleObjectDynamicsEvent(self, obj_update) :
+        insert_list = []
+        update_map = obj_update.update_map
+        vname = obj_update.name
         if vname not in self.Vehicles2Sim :
             self.__Logger.warn("attempt to update unknown vehicle %s" % (vname))
             return True
@@ -417,73 +396,78 @@ class OpenSimConnector(BaseConnector.BaseConnector) :
 
         # Save the dynamics information, acceleration is only needed in the tween update
         update = OpenSimVehicleDynamics()
-        update.Position = event.ObjectPosition.ScaleVector(self.WorldSize).AddVector(self.WorldOffset)
-        update.Velocity = event.ObjectVelocity.ScaleVector(self.WorldSize)
-        update.Rotation = event.ObjectRotation
-        update.UpdateTime = self.CurrentTime
+        if "Position" in update_map and "Velocity" in update_map and "Angle" in update_map:
+            position = ValueTypes.Vector3(update_map["Position"].getX(), update_map["Position"].getY(), update_map["Position"].getZ())
+            update.Position = position.ScaleVector(self.WorldSize).AddVector(self.WorldOffset)
+            velocity = ValueTypes.Vector3(update_map["Velocity"].getX(), update_map["Velocity"].getY(), update_map["Velocity"].getZ())
+            update.Velocity = velocity.ScaleVector(self.WorldSize)
+            rotation = ValueTypes.Quaternion(update_map["Angle"].getX(), update_map["Angle"].getY(), update_map["Angle"].getZ(), update_map["Angle"].getW())
+            update.Rotation = rotation
+            update.UpdateTime = self.CurrentTime
 
-        #if self.Debug == True:
-        #    self.__Logger.warn("Normalized position: %s, Sumo position: %s, OpenSim Position: %s" %
-        #                       (event.ObjectPosition,event.ObjectPosition.ScaleVector(ValueTypes.Vector3(38560.0,38560.0,100.0)),update.Position))
 
-        # Compute the tween update (the update halfway between the last reported position and
-        # the current reported position, with the tween we know the acceleration as opposed to
-        # the current update where we dont know acceleration
-        tween = OpenSimVehicleDynamics.CreateTweenUpdate(vehicle.LastUpdate, update, deltat)
+            #if self.Debug == True:
+            #    self.__Logger.warn("Normalized position: %s, Sumo position: %s, OpenSim Position: %s" %
+            #                       (event.ObjectPosition,event.ObjectPosition.ScaleVector(ValueTypes.Vector3(38560.0,38560.0,100.0)),update.Position))
 
-        # if the vehicle is already in the queue then just save the new values
-        # and call it quits
-        if vehicle.InUpdateQueue :
+            # Compute the tween update (the update halfway between the last reported position and
+            # the current reported position, with the tween we know the acceleration as opposed to
+            # the current update where we dont know acceleration
+            tween = OpenSimVehicleDynamics.CreateTweenUpdate(vehicle.LastUpdate, update, deltat)
+
+            # if the vehicle is already in the queue then just save the new values
+            # and call it quits
+            if vehicle.InUpdateQueue :
+                vehicle.TweenUpdate = tween
+                vehicle.LastUpdate = update
+                return True
+
+            # check to see if the change in position or velocity is signficant enough to
+            # warrant sending an update, emphasize velocity changes because dead reckoning
+            # will handle position updates reasonably if the velocity is consistent
+
+            # Condition 1: this is not the first update
+            if vehicle.LastUpdate.UpdateTime > 0 :
+                # Condition 2: the acceleration is about the same
+                if vehicle.TweenUpdate.Acceleration.ApproxEquals(tween.Acceleration, self.AccelerationDelta) :
+                    # Condition 3: the position check, need to handle lane changes so this check
+                    # is not redundant with acceleration check
+                    ideltat = tween.UpdateTime - vehicle.TweenUpdate.UpdateTime
+                    ipos = vehicle.TweenUpdate.InterpolatePosition(ideltat)
+                    if ipos.ApproxEquals(tween.Position,self.PositionDelta) :
+                        self.Interpolated += 1
+                        return True
+
             vehicle.TweenUpdate = tween
             vehicle.LastUpdate = update
-            return True
+            vehicle.InUpdateQueue = True
 
-        # check to see if the change in position or velocity is signficant enough to
-        # warrant sending an update, emphasize velocity changes because dead reckoning
-        # will handle position updates reasonably if the velocity is consistent
+            # if self.WorkQ.full() :
+            #     print "full queue at time step %d" % (self.CurrentStep)
 
-        # Condition 1: this is not the first update
-        if vehicle.LastUpdate.UpdateTime > 0 :
-            # Condition 2: the acceleration is about the same
-            if vehicle.TweenUpdate.Acceleration.ApproxEquals(tween.Acceleration, self.AccelerationDelta) :
-                # Condition 3: the position check, need to handle lane changes so this check
-                # is not redundant with acceleration check
-                ideltat = tween.UpdateTime - vehicle.TweenUpdate.UpdateTime
-                ipos = vehicle.TweenUpdate.InterpolatePosition(ideltat)
-                if ipos.ApproxEquals(tween.Position,self.PositionDelta) :
-                    self.Interpolated += 1
-                    return True
-            
-        vehicle.TweenUpdate = tween
-        vehicle.LastUpdate = update
-        vehicle.InUpdateQueue = True
+            #self.WorkQ.put(vname)
+            insert_list.append(vname)
 
-        # if self.WorkQ.full() :
-        #     print "full queue at time step %d" % (self.CurrentStep)
-
-        self.WorkQ.put(vname)
-
-        # print "Moved vehicle " + vname + " with id " + str(vehicle) + " to location " + str(position)
+            # print "Moved vehicle " + vname + " with id " + str(vehicle) + " to location " + str(position)
+        else:
+            self.__Logger.error("Not all expected attributes were available: %s", update_map)
+        self.WorkQ.put(insert_list)
         return True
 
     # -----------------------------------------------------------------
     # Returns True if the simulation can continue
-    def HandleTimerEvent(self, event) :
-        self.CurrentStep = event.CurrentStep
-        self.CurrentTime = event.CurrentTime
+    def HandleTimerEvent(self, pmap) :
+        self.CurrentStep = pmap["CurrentStep"]
+        self.CurrentTime = pmap["CurrentTime"]
 
         # Compute the clock skew
         self.AverageClockSkew = (9.0 * self.AverageClockSkew + (self.Clock() - self.CurrentTime)) / 10.0
 
         if (self.CurrentStep % int(5.0 / 0.2)) == 0:
                 self.__Logger.warn('[%s] number of vehicles in simulation: %s', self.CurrentStep, len(self.Vehicles2Sim))
-        # Send the event if we need to
-        if (self.CurrentStep % self.DumpCount) == 0 :
-            event = EventTypes.OpenSimConnectorStatsEvent(self.CurrentStep, self.AverageClockSkew)
-            self.PublishEvent(event)
 
     # -----------------------------------------------------------------
-    def HandleShutdownEvent(self, event) :
+    def HandleShutdownEvent(self) :
         for name,sim in self.Scenes.items():
             conn = sim["RemoteControl"]
             # clean up all the outstanding vehicles
@@ -500,6 +484,7 @@ class OpenSimConnector(BaseConnector.BaseConnector) :
             #self.__Logger.info('create/delete messages sent to opensim: %d', self.OpenSimConnector.MessagesSent)
             self.__Logger.info('%d vehicles interpolated correctly', self.Interpolated)
             self.__Logger.info('shut down')
+        self.hlaconn.shutdown()
 
 
     # -----------------------------------------------------------------
@@ -510,12 +495,16 @@ class OpenSimConnector(BaseConnector.BaseConnector) :
             scene["RemoteControl"].SetSunParameters(self.StartTimeOfDay, daylength=self.RealDayLength)
 
         self.__Logger.debug("Debug logger is on")
-        # Connect to the event registry
-        self.SubscribeEvent(EventTypes.EventCreateObject, self.HandleCreateObjectEvent)
-        self.SubscribeEvent(EventTypes.EventDeleteObject, self.HandleDeleteObjectEvent)
-        self.SubscribeEvent(EventTypes.EventObjectDynamics, self.HandleObjectDynamicsEvent)
-        self.SubscribeEvent(EventTypes.TimerEvent, self.HandleTimerEvent)
-        self.SubscribeEvent(EventTypes.ShutdownEvent, self.HandleShutdownEvent)
+        while not self.hlaconn.ready():
+            time.sleep(1.0)
+
+        self.hlaconn.subscribesInteraction("HLAinteractionRoot.CreateObject", self.HandleCreateObjectEvent)
+        self.hlaconn.subscribesInteraction("HLAinteractionRoot.TimerEvent", self.HandleTimerEvent)
+        self.hlaconn.subscribesInteraction("HLAinteractionRoot.DeleteObject", self.HandleDeleteObjectEvent)
+        self.hlaconn.subscribesObject("HLAobjectRoot.Vehicle", ["Position", "Angle", "Velocity", "VehicleName", "VehicleType"], self.HandleObjectDynamicsEvent)
+
+        #self.hlaconn.subscribesInteraction(EventTypes.EventObjectDynamics, self.HandleObjectDynamicsEvent)
+        #self.hlaconn.subscribesInteraction(EventTypes.ShutdownEvent, self.HandleShutdownEvent)
 
         # Start the worker threads
         self.WorkQ = Queue.Queue(0)
@@ -524,7 +513,4 @@ class OpenSimConnector(BaseConnector.BaseConnector) :
             thread = OpenSimUpdateThread(self.WorkQ, self.Scenes, self, self.Vehicles2Sim, self.Binary)
             thread.start()
             self.UpdateThreads.append(thread)
-
-        # all set... time to get to work!
-        self.HandleEvents()
 

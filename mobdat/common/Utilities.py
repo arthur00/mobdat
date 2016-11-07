@@ -43,6 +43,7 @@ import time
 import OpenSimRemoteControl
 import getpass
 import uuid
+import platform
 
 # we need to import python modules from the $SUMO_HOME/tools directory
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
@@ -55,6 +56,18 @@ _NameCounts = {}
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
+
+def get_os():
+    if platform.system() == 'Windows':
+        return 'Windows'
+    elif platform.system().startswith("CYGWIN"):
+        return 'Windows CYGWIN'
+    elif platform.system() == 'Java':
+        import java.lang.System
+        return java.lang.System.getProperty('os.name')
+    else:
+        return platform.system()
+
 def AuthByUserName(settings) :
     for sname,sim in settings["OpenSimConnector"]["Scenes"].items():
         endpoint = str(sim["EndPoint"]) if "EndPoint" in sim else \
@@ -68,7 +81,7 @@ def AuthByUserName(settings) :
         if not passwd :
             print "Please type the password for User {0} in Scene {1}".format(avname,sname)
             passwd = getpass.getpass()
-        rc = OpenSimRemoteControl.OpenSimRemoteControl(endpoint)
+        rc = OpenSimRemoteControl.OpenSimRemoteControl(endpoint, num_pools=100, maxsize=10)
         rc.DomainList = domains
         response = rc.AuthenticateAvatarByName(avname,passwd,lifespan)
         if not response['_Success'] :

@@ -138,21 +138,19 @@ class SocialConnector(BaseConnector.BaseConnector) :
         vtype = str(trip.VehicleType)
         rname = str(trip.Source.Capsule.DestinationName)
         tname = str(trip.Destination.Capsule.SourceName)
-#
-#         self.__Logger.debug('add vehicle %s from %s to %s',vname, rname, tname)
-#
-#         # save the trip so that when the vehicle arrives we can get the trip
-#         # that caused the car to be created
-#         self.TripCallbackMap[vname] = trip
-#
-#         event = EventTypes.EventAddVehicle(vname, vtype, rname, tname)
+        # self.__Logger.debug('add vehicle %s from %s to %s',vname, rname, tname)
+
+        # save the trip so that when the vehicle arrives we can get the trip
+        # that caused the car to be created
+        self.TripCallbackMap[vname] = trip
+
+
         addv = {}
         addv["VehicleName"] = vname
         addv["VehicleType"] = vtype
         addv["DestinationName"] = rname
         addv["Source"] = tname
 
-        #self.PublishEvent(event)
         self.hlaconn.sendInteraction("HLAinteractionRoot.AddVehicle", addv)
         self.vehicle_count += 1
 
@@ -188,7 +186,6 @@ class SocialConnector(BaseConnector.BaseConnector) :
         """
         #self.CurrentStep = event.CurrentStep
         self.CurrentStep = pmap["CurrentStep"]
-        print "#HandleTimerEvent#"
 
         if self.CurrentStep % 100 == 0 :
             wtime = self.WorldTime
@@ -204,8 +201,8 @@ class SocialConnector(BaseConnector.BaseConnector) :
             trip.TripStarted(self)
 
     # -----------------------------------------------------------------
-    def HandleShutdownEvent(self, event) :
-        pass
+    def HandleShutdownEvent(self) :
+        self.hlaconn.shutdown()
 
     # -----------------------------------------------------------------
     def SimulationStart(self) :
@@ -216,13 +213,6 @@ class SocialConnector(BaseConnector.BaseConnector) :
         # all set... time to get to work!
         while not self.hlaconn.ready():
             time.sleep(1.0)
-        att_map = {}
-        att_map["Position"] = "Position"
-        att_map["Angle"] = "HLAfloat64BE"
-        att_map["Velocity"] = "HLAfloat64BE"
-        att_map["VehicleName"] = "HLAASCIIstring"
-        att_map["VehicleType"] = "HLAASCIIstring"
-        self.hlaconn.registerAttributes("HLAobjectRoot.Vehicle", att_map)
         self.hlaconn.producesInteraction("HLAinteractionRoot.AddVehicle")
         self.hlaconn.subscribesInteraction("HLAinteractionRoot.DeleteObject", self.HandleDeleteObjectEvent)
         self.hlaconn.subscribesInteraction("HLAinteractionRoot.TimerEvent", self.HandleTimerEvent)

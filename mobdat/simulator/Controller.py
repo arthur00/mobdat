@@ -45,6 +45,7 @@ import csv
 from threading import Thread
 import datetime
 from hla.hla_connector import HLAConnector
+from java.lang import Double
 
 sys.path.append(os.path.join(os.environ.get("OPENSIM","/share/opensim"),"lib","python"))
 sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
@@ -158,6 +159,7 @@ class TimerThread(threading.Thread) :
             stime = self.Clock()
 
             pmap["CurrentStep"] = CurrentIteration
+            pmap["CurrentTime"] = Double(stime)
             self.hla_conn.sendInteraction("HLAinteractionRoot.TimerEvent", pmap)
 
             etime = self.Clock()
@@ -185,11 +187,11 @@ class MobdatController(cmd.Cmd) :
     pformat = 'mobdat [{0}]> '
 
     # -----------------------------------------------------------------
-    def __init__(self, evrouter, logger, autostart) :
+    def __init__(self, sims, logger, autostart) :
         cmd.Cmd.__init__(self)
 
         self.prompt = self.pformat.format(CurrentIteration)
-        self.EventRouter = evrouter
+        self.sims = sims
         self.__Logger = logger
         if autostart:
             self.do_start(None)
@@ -198,18 +200,6 @@ class MobdatController(cmd.Cmd) :
     def postcmd(self, flag, line) :
         self.prompt = self.pformat.format(CurrentIteration)
         return flag
-
-    # -----------------------------------------------------------------
-    def do_stopat(self, args) :
-        """stopat iteration
-        Stop sending timer events and shutdown the simulator after the specified iteration
-        """
-        pargs = args.split()
-        try :
-            global FinalIteration
-            FinalIteration = int(pargs[0])
-        except :
-            print 'Unable to parse input parameter %s' % args
 
     # -----------------------------------------------------------------
     def do_start(self, args) :
@@ -232,6 +222,8 @@ class MobdatController(cmd.Cmd) :
         # kill the timer if it hasn't already shutdown
         global SimulatorShutdown
         SimulatorShutdown = True
+        for sim in self.sims:
+            sim.HandleShutdownEvent()
 
         return True
 
@@ -257,8 +249,7 @@ def Controller(settings) :
     autostart = settings["General"].get("AutoStart", False)
 
     cnames = settings["General"].get("Connectors",['sumo', 'opensim', 'social', 'stats'])
-    connectors = []
-    hla_connectors = {}
+    sims = []
 
     # start the timer thread
     thread = TimerThread(settings)
@@ -270,24 +261,23 @@ def Controller(settings) :
 
         hla_conn = HLAConnector(settings, cname)
         hla_conn.start()
-        #while not hla_conn.ready():
-        #    time.sleep(1)
+
         connector = _SimulationControllers[cname](hla_conn, settings, world, laysettings, cname)
         connproc = Thread(target=connector.SimulationStart, args=())
         connproc.start()
-        connectors.append(connproc)
-
-    thread.start()
-    #controller = MobdatController(evrouter, logger, autostart)
-    #controller.cmdloop()
+        sims.append(connector)
 
     del world
 
-    thread.join()
+    thread.start()
+
+    controller = MobdatController(sims, logger, autostart)
+    controller.cmdloop()
+
 
     # send the shutdown event to the connectors
-    for connproc in connectors :
-        connproc.join()
+    #for connproc in connectors :
+    #    connproc.join()
 
     # and send the shutdown event to the router
     #event = EventTypes.ShutdownEvent(True)

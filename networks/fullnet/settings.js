@@ -16,7 +16,7 @@
 			"Minutes" : 20,
 			"Hours" : 0
 		},
-        "Connectors" : ["social"]
+        "Connectors" : ["opensim", "sumo", "social"]
     },
 	"Experiment" :
     {
@@ -46,7 +46,7 @@
 
     "OpenSimConnector" :
     {
-        "WorldSize" : [810.0, 810.0, 100.0],
+        "WorldSize" : [1910.0, 1910.0, 100.0],
         "RegionSize" : [1024.0, 1024.0],
         "BuildOffset" : [415.0, 415.0],
         "WorldOffset" : [10.0, 10.0, 25.5],
@@ -54,7 +54,7 @@
         "PositionDelta" : 0.1,
         "VelocityDelta" : 0.1,
         "AccelerationDelta" : 0.05,
-        "UpdateThreadCount" : 1,
+        "UpdateThreadCount" : 4,
         "Binary" : true,
 	"Scenes" :
 	{

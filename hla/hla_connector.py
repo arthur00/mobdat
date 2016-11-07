@@ -17,7 +17,8 @@ from hla.rti1516e import RtiFactoryFactory, RTIambassador,\
     ParameterHandleValueMapFactory
 from hla.rti1516e.time import HLAfloat64TimeFactory
 
-from hla import PositionCoder, JavaFederate, JavaFederateSettings, Position
+from hla import PositionCoder, JavaFederate, JavaFederateSettings, Position,\
+    QuaternionCoder
 from hla.rti1516e import CallbackModel
 import logging
 from java.io import File
@@ -34,6 +35,12 @@ class FOMAttribute:
     def __init__(self, name, fom_type):
         self.name = name
         self.type = fom_type
+
+class ObjectUpdate:
+    def __init__(self, name, handle, update_map):
+        self.handle = handle
+        self.name = name
+        self.update_map = update_map
 
 class HLAConnector(Thread):
     def __init__(self, settings, name, obj_callback=None, int_callback=None):
@@ -56,17 +63,13 @@ class HLAConnector(Thread):
         self.settings.timeStep = long(timestep*1000)
         self.__init_encoders()
 
-        # For each object (string), stores { attribute (string) : type (string) }
-        self.obj2attributes = {}
-        self.int2handle = {}
-        self.int2param = {}
         self.int2callback = {}
+        self.obj2callback = {}
 
         self.objsimcallback = obj_callback
         self.intsimcallback = int_callback
 
         self.federate = JavaFederate(self.settings, self.obj_callback, self.int_callback)
-        self.shutdown = False
 
     def __readFOMObjects(self, settings):
         prefix = self.prefix
@@ -104,10 +107,13 @@ class HLAConnector(Thread):
     def run(self):
         self.federate.runFederate()
 
+    def shutdown(self):
+        self.federate.shutdown()
+
     def int_callback(self, int_handle, parameter_map):
-        print "## int callback"
-        print int_handle
-        print parameter_map
+        #print "## int callback"
+        #print int_handle
+        #print parameter_map
         int_params = {}
         intname = self.federate.getInteractionClassName(int_handle)
         for key in parameter_map:
@@ -117,42 +123,27 @@ class HLAConnector(Thread):
             typeinst = self.encoders[inttype]()
             typeinst.decode(parameter_map[key])
             v = typeinst.getValue()
-            print parname + " = " + str(v)
+            #print parname + " = " + str(v)
             int_params[parname] = v
         if self.int2callback[intname]:
             self.int2callback[intname](int_params)
 
-    def obj_callback(self, obj_instance, attribute_map):
-        print "### obj callback"
-        print obj_instance
-        print attribute_map
-        obj_updates = {}
+    def obj_callback(self, obj_instance, obj_name, attribute_map):
+        att_updates = {}
+        objclass = self.federate.getObjectClassName(obj_instance)
         for key in attribute_map:
-            print "### key %s" % key
-            obj_updates[obj_instance] = {}
+            #print "### key %s" % key
             attname = self.federate.getAttributeNameFromInstance(obj_instance, key)
-            objname = self.federate.getObjectClassName(obj_instance)
-            atttype = self.objatt2types[objname][attname]
+            atttype = self.objatt2types[objclass][attname]
             typeinst = self.encoders[atttype]()
             typeinst.decode(attribute_map[key])
             v = typeinst.getValue()
-            print attname + " = " + str(v)
-            obj_updates[obj_instance][attname] = v
-        if self.objsimcallback:
-            self.objsimcallback(obj_updates)
+            #print attname + " = " + str(v)
+            att_updates[attname] = v
+        obj_update = ObjectUpdate(obj_name, obj_instance, att_updates)
+        if self.obj2callback[objclass]:
+            self.obj2callback[objclass](obj_update)
 
-
-    # attribute_map : <attribute_name> : <attribute_type_string>
-    def registerAttributes(self, obj_name, attribute_map):
-        self.obj2attributes[obj_name] = {}
-        for att_name, att_type in attribute_map.items():
-            self.obj2attributes[obj_name][att_name] = att_type
-
-    # parameter_map : <parameter_name> : <parameter_type_string>
-    def registerParameters(self, intClass, parameter_map):
-        self.int2param[intClass] = {}
-        for att_name, att_type in parameter_map.items():
-            self.int2param[intClass][att_name] = att_type
 
     def __init_encoders(self):
         self.encoders = {}
@@ -184,9 +175,13 @@ class HLAConnector(Thread):
 
         # TODO: this is a custom type, and should be passed as a parameter
         self.encoders["Position"] = PositionCoder
+        self.encoders["Quaternion"] = QuaternionCoder
 
-    def createObject(self, obj_string):
-        return self.federate.createObject(obj_string)
+    def createObject(self, obj_string, obj_name=None):
+        if obj_name:
+            return self.federate.createObject(obj_string, obj_name)
+        else:
+            return self.federate.createObject(obj_string)
 
     def producesObjectAttributes(self, obj_string, attributes=None):
         if not attributes:
@@ -201,13 +196,14 @@ class HLAConnector(Thread):
     def producesInteraction(self, int_string):
         self.federate.producesInteraction(int_string)
 
-    def subscribesObject(self, obj_string, attributes=None):
+    def subscribesObject(self, obj_string, attributes=None, object_callback = None):
         if not attributes:
             self.federate.subscribesObject(obj_string)
         else:
             try:
                 java_list = jarray.array(attributes, String)
                 self.federate.subscribesObjectAttributes(obj_string, java_list)
+                self.obj2callback[obj_string] = object_callback
             except:
                 self.logger.error("[subscribeObject] could not convert list to String array.")
 
@@ -215,18 +211,22 @@ class HLAConnector(Thread):
         self.federate.subscribesInteraction(int_string)
         self.int2callback[int_string] = interaction_callback
 
+    def updateObjectWithName(self, obj_string, obj_name, attributeValueMap):
+        objinst_handle = self.federate.getObjectInstanceHandle(obj_name)
+        self.updateObject(obj_string, objinst_handle, attributeValueMap)
+
     # attributeValueMap: { <attribute_name> : <attribute_value> }
     def updateObject(self, obj_string, objinst_handle, attributeValueMap):
         try:
-            if obj_string not in self.obj2attributes:
+            if obj_string not in self.objatt2types:
                 self.logger.error("object %s not properly registered.", objinst_handle)
                 return
             #attmap = self.federate.createAttributeHandleValueMap(len(attributeValueMap))
             for att_name in attributeValueMap.keys():
-                if att_name not in self.obj2attributes[obj_string]:
+                if att_name not in self.objatt2types[obj_string]:
                     self.logger.error("Unkown attribute name for object (%s.%s).", obj_string, att_name)
                     return
-                att_type = self.obj2attributes[obj_string][att_name]
+                att_type = self.objatt2types[obj_string][att_name]
                 attributeValueMap[att_name] = self.encoders[att_type](attributeValueMap[att_name]).toByteArray()
             self.federate.updateObjectAttributes(obj_string, objinst_handle, attributeValueMap)
         except:
@@ -246,22 +246,6 @@ class HLAConnector(Thread):
             self.logger.error("could not send interaction %s", int_name)
             raise
 
-
-    def start_timer(self):
-        while (True):
-            while not self.shutdown :
-                stime = time.time()
-
-                # Replace by Timer interaction in HLA
-                # event = EventTypes.TimerEvent(CurrentIteration, stime)
-                # self.EventRouter.RouterQueue.put(event)
-                #self.federate.sendInteraction(?)
-
-                etime = time.time()
-                # TODO: determine when to stop
-                if (etime - stime) < self.IntervalTime :
-                    time.sleep(self.IntervalTime - (etime - stime))
-
 class SimulationA(object):
     def __init__(self, settings):
         self.hlaconn = HLAConnector(settings, "FederateTest A")
@@ -271,25 +255,6 @@ class SimulationB(object):
     def __init__(self, settings):
         self.hlaconn = HLAConnector(settings, "FederateTest B")
         self.hlaconn.start()
-
-#     def B_obj_callback(self, obj_instance, attribute_map):
-#         print "### B obj callback"
-#         print obj_instance
-#         print attribute_map
-#         print self.hlaconn.objatt2types
-#         for key in attribute_map:
-#             attname = self.hlaconn.federate.getAttributeName(obj_instance, key)
-#             objname = self.hlaconn.federate.getObjectClassName(obj_instance)
-#             atttype = self.hlaconn.objatt2types[objname][attname]
-#             typeinst = self.hlaconn.encoders[atttype]()
-#             typeinst.decode(attribute_map[key])
-#             v = typeinst.getValue()
-#             print self.hlaconn.federate.getAttributeName(obj_instance, key) + " = " + str(v)
-#
-#     def B_int_callback(self, int_handle, parameter_map):
-#         print "### B int callback"
-#         print int_handle
-#         print parameter_map
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
@@ -310,15 +275,7 @@ if __name__ == "__main__":
     while(not a.ready() and not b.ready()):
         time.sleep(0.5)
 
-
-    att_map = {}
-    att_map["Position"] = "Position"
-    att_map["Angle"] = "HLAfloat64BE"
-    att_map["Velocity"] = "HLAfloat64BE"
-    att_map["VehicleName"] = "HLAASCIIstring"
-    att_map["VehicleType"] = "HLAASCIIstring"
     a.producesObjectAttributes("HLAobjectRoot.Vehicle", ["Position", "Angle", "Velocity", "VehicleName", "VehicleType"])
-    a.registerAttributes("HLAobjectRoot.Vehicle", att_map)
     a.producesInteraction("HLAinteractionRoot.AddVehicle")
     class Vehicle:
         pass
@@ -329,7 +286,7 @@ if __name__ == "__main__":
     b.subscribesObject("HLAobjectRoot.Vehicle", ["Velocity", "VehicleName", "Position"])
     b.subscribesInteraction("HLAinteractionRoot.AddVehicle")
 
-    a.updateObject("HLAobjectRoot.Vehicle", objinst_handle, {"VehicleName" : "Banana", "Position" : Position(1.0, 1.0, 1.0), 'Velocity' : 25.5})
+    a.updateObject("HLAobjectRoot.Vehicle", objinst_handle, {"VehicleName" : "Banana", "Position" : Position(0.123456789,0.1, 0.987654321), 'Velocity' : Position(2.0, 2.0, 2.0)})
 
     addv = {}
     addv["VehicleName"] = "BananaCar"
@@ -338,5 +295,7 @@ if __name__ == "__main__":
     addv["Source"] = "Market"
 
     a.sendInteraction("HLAinteractionRoot.AddVehicle", addv)
-    pass
+    time.sleep(5)
+    a.shutdown()
+    b.shutdown()
     #JavaFederate.main([])
